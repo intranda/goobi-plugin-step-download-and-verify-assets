@@ -1,5 +1,15 @@
 package de.intranda.goobi.plugins;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Path;
+import java.util.ArrayList;
+
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
  *
@@ -21,8 +31,12 @@ package de.intranda.goobi.plugins;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.configuration.SubnodeConfiguration;
+import org.apache.commons.io.FilenameUtils;
+import org.goobi.beans.Process;
+import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginGuiType;
 import org.goobi.production.enums.PluginReturnValue;
@@ -31,6 +45,8 @@ import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
 import de.sub.goobi.config.ConfigPlugins;
+import de.sub.goobi.helper.exceptions.DAOException;
+import de.sub.goobi.helper.exceptions.SwapException;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
@@ -49,6 +65,11 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private boolean allowTaskFinishButtons;
     private String returnPath;
 
+    private List<String> fileNameProperties = new ArrayList<>();
+
+    private Process process;
+    private String masterFolder;
+
     @Override
     public void initialize(Step step, String returnPath) {
         this.returnPath = returnPath;
@@ -63,8 +84,21 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         List<Object> properties = myconfig.getList("fileNameProperty");
         for (Object property : properties) {
-            log.debug("property = " + property);
+            fileNameProperties.add(String.valueOf(property));
         }
+
+        process = step.getProzess();
+        log.debug("process id = " + process.getId());
+
+        try {
+            masterFolder = process.getImagesOrigDirectory(false);
+            log.debug("masterFolder = " + masterFolder);
+
+        } catch (IOException | SwapException | DAOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+
     }
 
     @Override
@@ -115,11 +149,117 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     public PluginReturnValue run() {
         boolean successful = true;
         // your logic goes here
-        
-        log.info("DownloadAndVerifyAssets step plugin executed");
-        if (!successful) {
-            return PluginReturnValue.ERROR;
+
+        // retrieve urls
+        List<String> fileUrlsList = prepareFileUrlsList();
+        // download and verify files
+        for (String fileUrl : fileUrlsList) {
+            log.debug("fileUrl = " + fileUrl);
+            downloadFile(fileUrl, masterFolder);
         }
-        return PluginReturnValue.FINISH;
+
+        log.info("DownloadAndVerifyAssets step plugin executed");
+        return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
+    }
+
+    private void processFileNameProperty(String fileNameProperty) {
+        log.debug("processing fileNameProperty: " + fileNameProperty);
+        // get the value of the process property
+
+        // check if the value contains multiple urls separated by comma, if so split them
+
+    }
+
+    private List<String> prepareFileUrlsList() {
+        List<String> urlsList = new ArrayList<>();
+        Map<String, String> propertiesMap = preparePropertiesMap();
+        for (String fileNameProperty : fileNameProperties) {
+            if (propertiesMap.containsKey(fileNameProperty)) {
+                log.debug("found property = " + fileNameProperty);
+                String propertyValue = propertiesMap.get(fileNameProperty);
+                log.debug("propertyValue = " + propertyValue);
+                addUrlsToList(propertyValue, urlsList);
+            }
+        }
+
+        return urlsList;
+    }
+
+    private void addUrlsToList(String propertyValue, List<String> urlsList) {
+        if (!propertyValue.contains(",")) {
+            urlsList.add(propertyValue);
+            return;
+        }
+
+        // multiple urls separated by comma
+        String[] urls = propertyValue.split(",");
+        for (String url : urls) {
+            urlsList.add(url);
+        }
+    }
+
+    private Map<String, String> preparePropertiesMap() {
+        List<Processproperty> properties = process.getEigenschaftenList();
+        Map<String, String> propertiesMap = new HashMap<>();
+        for (Processproperty property : properties) {
+            String key = property.getTitel();
+            String value = property.getWert();
+            propertiesMap.put(key, value);
+        }
+
+        return propertiesMap;
+    }
+
+    /**
+     * download the file from the given url
+     * 
+     * @param strUrl url of the image
+     * @param targetFolder targeted folder to download the file
+     */
+    private void downloadFile(String strUrl, String targetFolder) {
+        log.debug("downloading file from url: " + strUrl);
+        // check url
+        URL url = null;
+        try {
+            url = new URL(strUrl);
+        } catch (MalformedURLException e) {
+            String message = "the input URL is malformed: " + strUrl;
+            //            reportError(message);
+            log.error(message);
+            return;
+        }
+
+        // url is correctly formed, start to download
+        String fileName = getFileNameFromUrl(url);
+        Path targetPath = Path.of(targetFolder, fileName);
+
+        try (ReadableByteChannel readableByteChannel = Channels.newChannel(url.openStream());
+                FileOutputStream outputStream = new FileOutputStream(targetPath.toString())) {
+
+            FileChannel fileChannel = outputStream.getChannel();
+            fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
+
+        } catch (IOException e) {
+            String message = "failed to download the file from " + strUrl;
+            //            reportError(message);
+            log.error(message);
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * get the file name from a URL object
+     * 
+     * @param url the URL object
+     * @return the full file name including the file extension
+     */
+    private String getFileNameFromUrl(URL url) {
+        String urlFileName = url.getFile();
+        log.debug("urlFileName = " + urlFileName);
+
+        String fileName = FilenameUtils.getName(urlFileName);
+        log.debug("fileName = " + fileName);
+
+        return fileName;
     }
 }
