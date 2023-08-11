@@ -42,6 +42,7 @@ import org.apache.commons.io.FilenameUtils;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
+import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginGuiType;
 import org.goobi.production.enums.PluginReturnValue;
 import org.goobi.production.enums.PluginType;
@@ -49,6 +50,7 @@ import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
 import de.sub.goobi.config.ConfigPlugins;
+import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import lombok.Getter;
@@ -162,50 +164,13 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             processFile(fileUrl, masterFolder);
         }
 
+        if (successful) {
+            // report success via REST to the BACH system
+            reportSuccess();
+        }
+
         log.info("DownloadAndVerifyAssets step plugin executed");
         return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
-    }
-
-    private void processFile(String fileUrl, String targetFolder) {
-        // prepare URL
-        log.debug("downloading file from url: " + fileUrl);
-        // check url
-        URL url = null;
-        try {
-            url = new URL(fileUrl);
-        } catch (MalformedURLException e) {
-            String message = "the input URL is malformed: " + fileUrl;
-            //            reportError(message);
-            log.error(message);
-            return;
-        }
-
-        String fileName = getFileNameFromUrl(url);
-        Path targetPath = Path.of(targetFolder, fileName);
-
-        // url is correctly formed, download the file
-        try {
-            long checksumOrigin = downloadFile(url, targetPath);
-
-            // check checksum
-            boolean passed = checkFileChecksum(checksumOrigin, targetPath);
-            log.debug("passed = " + passed);
-
-        } catch (IOException e) {
-            String message = "failed to download the file from " + fileUrl;
-            //            reportError(message);
-            log.error(message);
-        }
-
-
-    }
-
-    private void processFileNameProperty(String fileNameProperty) {
-        log.debug("processing fileNameProperty: " + fileNameProperty);
-        // get the value of the process property
-
-        // check if the value contains multiple urls separated by comma, if so split them
-
     }
 
     private List<String> prepareFileUrlsList() {
@@ -223,6 +188,18 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return urlsList;
     }
 
+    private Map<String, String> preparePropertiesMap() {
+        List<Processproperty> properties = process.getEigenschaftenList();
+        Map<String, String> propertiesMap = new HashMap<>();
+        for (Processproperty property : properties) {
+            String key = property.getTitel();
+            String value = property.getWert();
+            propertiesMap.put(key, value);
+        }
+
+        return propertiesMap;
+    }
+
     private void addUrlsToList(String propertyValue, List<String> urlsList) {
         if (!propertyValue.contains(",")) {
             urlsList.add(propertyValue);
@@ -236,16 +213,55 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
     }
 
-    private Map<String, String> preparePropertiesMap() {
-        List<Processproperty> properties = process.getEigenschaftenList();
-        Map<String, String> propertiesMap = new HashMap<>();
-        for (Processproperty property : properties) {
-            String key = property.getTitel();
-            String value = property.getWert();
-            propertiesMap.put(key, value);
+    private void processFile(String fileUrl, String targetFolder) {
+        // prepare URL
+        log.debug("downloading file from url: " + fileUrl);
+        // check url
+        URL url = null;
+        try {
+            url = new URL(fileUrl);
+        } catch (MalformedURLException e) {
+            String message = "the input URL is malformed: " + fileUrl;
+            reportError(message);
+            return;
         }
 
-        return propertiesMap;
+        String fileName = getFileNameFromUrl(url);
+        Path targetPath = Path.of(targetFolder, fileName);
+
+        // url is correctly formed, download the file
+        try {
+            long checksumOrigin = downloadFile(url, targetPath);
+
+            // check checksum
+            boolean passed = checkFileChecksum(checksumOrigin, targetPath);
+            log.debug("passed = " + passed);
+            if (!passed) {
+                String message = "checksums do not match";
+                reportError(message);
+            }
+
+        } catch (IOException e) {
+            String message = "failed to download the file from " + fileUrl;
+            reportError(message);
+        }
+
+    }
+
+    /**
+     * get the file name from a URL object
+     * 
+     * @param url the URL object
+     * @return the full file name including the file extension
+     */
+    private String getFileNameFromUrl(URL url) {
+        String urlFileName = url.getFile();
+        log.debug("urlFileName = " + urlFileName);
+
+        String fileName = FilenameUtils.getName(urlFileName);
+        log.debug("fileName = " + fileName);
+
+        return fileName;
     }
 
     /**
@@ -270,22 +286,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return crc32;
     }
 
-    /**
-     * get the file name from a URL object
-     * 
-     * @param url the URL object
-     * @return the full file name including the file extension
-     */
-    private String getFileNameFromUrl(URL url) {
-        String urlFileName = url.getFile();
-        log.debug("urlFileName = " + urlFileName);
-
-        String fileName = FilenameUtils.getName(urlFileName);
-        log.debug("fileName = " + fileName);
-
-        return fileName;
-    }
-
     private boolean checkFileChecksum(long checksumOrigin, Path filePath) {
         CRC32 crc = new CRC32();
         try (InputStream in = new BufferedInputStream(new FileInputStream(filePath.toFile()))) {
@@ -295,8 +295,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             }
 
         } catch (IOException e) {
-            String message = "checksums do not match";
-            log.error(message);
+            String message = "failed to calculate the checksum of the downloaded file: " + filePath;
+            reportError(message);
             return false;
         }
 
@@ -305,4 +305,18 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         return checksum == checksumOrigin;
     }
+
+    private void reportError(String message) {
+        log.error(message);
+        Helper.addMessageToProcessJournal(process.getId(), LogType.ERROR, message);
+
+        // error report via REST to the BACH system
+
+    }
+
+    private void reportSuccess() {
+        log.debug("success");
+    }
+
+
 }
