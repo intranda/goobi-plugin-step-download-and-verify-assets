@@ -1,15 +1,3 @@
-package de.intranda.goobi.plugins;
-
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.file.Path;
-import java.util.ArrayList;
-
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
  *
@@ -29,9 +17,25 @@ import java.util.ArrayList;
  *
  */
 
+package de.intranda.goobi.plugins;
+
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.CRC32;
+import java.util.zip.CheckedInputStream;
 
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.apache.commons.io.FilenameUtils;
@@ -155,11 +159,45 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // download and verify files
         for (String fileUrl : fileUrlsList) {
             log.debug("fileUrl = " + fileUrl);
-            downloadFile(fileUrl, masterFolder);
+            processFile(fileUrl, masterFolder);
         }
 
         log.info("DownloadAndVerifyAssets step plugin executed");
         return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
+    }
+
+    private void processFile(String fileUrl, String targetFolder) {
+        // prepare URL
+        log.debug("downloading file from url: " + fileUrl);
+        // check url
+        URL url = null;
+        try {
+            url = new URL(fileUrl);
+        } catch (MalformedURLException e) {
+            String message = "the input URL is malformed: " + fileUrl;
+            //            reportError(message);
+            log.error(message);
+            return;
+        }
+
+        String fileName = getFileNameFromUrl(url);
+        Path targetPath = Path.of(targetFolder, fileName);
+
+        // url is correctly formed, download the file
+        try {
+            long checksumOrigin = downloadFile(url, targetPath);
+
+            // check checksum
+            boolean passed = checkFileChecksum(checksumOrigin, targetPath);
+            log.debug("passed = " + passed);
+
+        } catch (IOException e) {
+            String message = "failed to download the file from " + fileUrl;
+            //            reportError(message);
+            log.error(message);
+        }
+
+
     }
 
     private void processFileNameProperty(String fileNameProperty) {
@@ -213,38 +251,23 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     /**
      * download the file from the given url
      * 
-     * @param strUrl url of the image
-     * @param targetFolder targeted folder to download the file
+     * @param url URL of the file
+     * @param targetPath targeted full path of the file
+     * @throws IOException
      */
-    private void downloadFile(String strUrl, String targetFolder) {
-        log.debug("downloading file from url: " + strUrl);
-        // check url
-        URL url = null;
-        try {
-            url = new URL(strUrl);
-        } catch (MalformedURLException e) {
-            String message = "the input URL is malformed: " + strUrl;
-            //            reportError(message);
-            log.error(message);
-            return;
-        }
-
-        // url is correctly formed, start to download
-        String fileName = getFileNameFromUrl(url);
-        Path targetPath = Path.of(targetFolder, fileName);
-
-        try (ReadableByteChannel readableByteChannel = Channels.newChannel(url.openStream());
+    private long downloadFile(URL url, Path targetPath) throws IOException {
+        CRC32 crc = new CRC32();
+        try (InputStream in = new CheckedInputStream(url.openStream(), crc);
+                ReadableByteChannel readableByteChannel = Channels.newChannel(in);
                 FileOutputStream outputStream = new FileOutputStream(targetPath.toString())) {
 
             FileChannel fileChannel = outputStream.getChannel();
             fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
-
-        } catch (IOException e) {
-            String message = "failed to download the file from " + strUrl;
-            //            reportError(message);
-            log.error(message);
-            e.printStackTrace();
         }
+
+        long crc32 = crc.getValue();
+        log.debug("crc32 = " + crc32);
+        return crc32;
     }
 
     /**
@@ -261,5 +284,25 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         log.debug("fileName = " + fileName);
 
         return fileName;
+    }
+
+    private boolean checkFileChecksum(long checksumOrigin, Path filePath) {
+        CRC32 crc = new CRC32();
+        try (InputStream in = new BufferedInputStream(new FileInputStream(filePath.toFile()))) {
+            int c;
+            while ((c = in.read()) != -1) {
+                crc.update(c);
+            }
+
+        } catch (IOException e) {
+            String message = "checksums do not match";
+            log.error(message);
+            return false;
+        }
+
+        long checksum = crc.getValue();
+        log.debug("crc value of downloaded file = " + checksum);
+
+        return checksum == checksumOrigin;
     }
 }
