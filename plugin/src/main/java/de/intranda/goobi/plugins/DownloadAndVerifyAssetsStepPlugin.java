@@ -20,6 +20,7 @@ package de.intranda.goobi.plugins;
  */
 
 import java.util.HashMap;
+import java.util.List;
 
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.goobi.beans.Step;
@@ -36,10 +37,10 @@ import net.xeoh.plugins.base.annotations.PluginImplementation;
 
 @PluginImplementation
 @Log4j2
-public class SampleStepPlugin implements IStepPluginVersion2 {
+public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     
     @Getter
-    private String title = "intranda_step_sample";
+    private String title = "intranda_step_download_and_verify_assets";
     @Getter
     private Step step;
     @Getter
@@ -57,7 +58,13 @@ public class SampleStepPlugin implements IStepPluginVersion2 {
         SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
         value = myconfig.getString("value", "default value"); 
         allowTaskFinishButtons = myconfig.getBoolean("allowTaskFinishButtons", false);
-        log.info("Sample step plugin initialized");
+        log.info("DownloadAndVerifyAssets step plugin initialized");
+        log.debug("value = " + value);
+
+        List<Object> properties = myconfig.getList("fileNameProperty");
+        for (Object property : properties) {
+            log.debug("property = " + property);
+        }
     }
 
     @Override
@@ -70,7 +77,7 @@ public class SampleStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public String getPagePath() {
-        return "/uii/plugin_step_sample.xhtml";
+        return "/uii/plugin_step_download_and_verify_assets.xhtml";
     }
 
     @Override
@@ -109,7 +116,7 @@ public class SampleStepPlugin implements IStepPluginVersion2 {
         boolean successful = true;
         // your logic goes here
         
-        log.info("Sample step plugin executed");
+        log.info("DownloadAndVerifyAssets step plugin executed");
         if (!successful) {
             return PluginReturnValue.ERROR;
         }

@@ -1,15 +1,15 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>de.intranda.goobi.plugins.step</groupId>
-  <artifactId>sample-main</artifactId>
+  <artifactId>download_and_verify_assets-main</artifactId>
   <version>23.07.2</version>
   <properties>
-    <jar.name>plugin_intranda_step_sample</jar.name>
+    <jar.name>plugin_intranda_step_download_and_verify_assets</jar.name>
     <dest.folder>/opt/digiverso/goobi/plugins/step/</dest.folder>
   </properties>
   <parent>
     <groupId>de.intranda.goobi.plugins.step</groupId>
-    <artifactId>sample</artifactId>
+    <artifactId>download_and_verify_assets</artifactId>
     <version>23.07.2</version>
   </parent>
   <build>
@@ -99,7 +99,7 @@
     </plugins>
   </build>
   <scm>
-    <url>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-step-sample.git</url>
-    <connection>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-step-sample.git</connection>
+    <url>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-step-download_and_verify_assets.git</url>
+    <connection>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-step-download_and_verify_assets.git</connection>
   </scm>
 </project>

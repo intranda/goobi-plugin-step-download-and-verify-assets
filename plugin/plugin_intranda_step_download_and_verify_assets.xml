@@ -5,12 +5,16 @@
           2.) step name matches and project is *
           3.) project name matches and step name is *
           4.) project name and step name are *
-	-->
+    -->
     
     <config>
         <!-- which projects to use for (can be more then one, otherwise use *) -->
         <project>*</project>
         <step>*</step>
+        
+        <fileNameProperty>mainText</fileNameProperty>
+        <fileNameProperty>assets</fileNameProperty>
+        <fileNameProperty>protocol</fileNameProperty>
         
         <!-- sample parameter -->
         <value>test</value>

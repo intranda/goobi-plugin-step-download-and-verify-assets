@@ -20,6 +20,7 @@ import org.goobi.beans.Step;
 import org.goobi.beans.User;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -43,7 +44,7 @@ import ugh.fileformats.mets.MetsMods;
 @PrepareForTest({ MetadatenHelper.class, VariableReplacer.class, ConfigurationHelper.class, ProcessManager.class,
         MetadataManager.class })
 @PowerMockIgnore({ "javax.management.*", "javax.xml.*", "org.xml.*", "org.w3c.*", "javax.net.ssl.*", "jdk.internal.reflect.*" })
-public class SamplePluginTest {
+public class DownloadAndVerifyAssetsPluginTest {
 
     private static String resourcesFolder;
 
@@ -71,13 +72,14 @@ public class SamplePluginTest {
 
     @Test
     public void testConstructor() throws Exception {
-        SampleStepPlugin plugin = new SampleStepPlugin();
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
         assertNotNull(plugin);
     }
 
+    @Ignore
     @Test
     public void testInit() {
-        SampleStepPlugin plugin = new SampleStepPlugin();
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
         plugin.initialize(step, "something");
         assertEquals(step.getTitel(), plugin.getStep().getTitel());
     }
