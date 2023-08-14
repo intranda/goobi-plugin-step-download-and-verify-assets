@@ -43,14 +43,13 @@ import org.apache.commons.io.FilenameUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.ResponseHandler;
-import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import org.goobi.api.rest.model.RestProcessResource;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
@@ -60,8 +59,6 @@ import org.goobi.production.enums.PluginReturnValue;
 import org.goobi.production.enums.PluginType;
 import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
@@ -376,83 +373,27 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     }
 
     private void responseViaRest(String method, String url, String json) {
+        HttpEntityEnclosingRequestBase httpBase;
         switch (method.toLowerCase()) {
             case "put":
-                responseViaPut(url, json);
+                httpBase = new HttpPut(url);
                 break;
             case "post":
-                responseViaPost(url, json);
+                httpBase = new HttpPost(url);
                 break;
-            default: // get
-                responseViaGet(url);
-                break;
+            default: // unknown
+                return;
         }
-    }
 
-    private void responseViaPut(String url, String json) {
-        log.debug("responsing via PUT");
         try (CloseableHttpClient client = HttpClients.createDefault()) {
-            HttpPut httpPut = new HttpPut(url);
-            httpPut.setHeader("Accept", "application/json");
-            httpPut.setHeader("Content-type", "application/json");
-            httpPut.setEntity(new StringEntity(json));
+            httpBase.setHeader("Accept", "application/json");
+            httpBase.setHeader("Content-type", "application/json");
+            httpBase.setEntity(new StringEntity(json));
 
-            log.info("Executing request " + httpPut.getRequestLine());
+            log.info("Executing request " + httpBase.getRequestLine());
 
-            String responseBody = client.execute(httpPut, RESPONSE_HANDLER);
+            String responseBody = client.execute(httpBase, RESPONSE_HANDLER);
             log.debug(responseBody);
-
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-    }
-
-    private void responseViaPost(String url, String json) {
-        log.debug("responsing via POST");
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
-            HttpPost httpPost = new HttpPost(url);
-            httpPost.setHeader("Accept", "application/json");
-            httpPost.setHeader("Content-type", "application/json");
-            httpPost.setEntity(new StringEntity(json));
-
-            log.info("Executing request " + httpPost.getRequestLine());
-
-            String responseBody = client.execute(httpPost, RESPONSE_HANDLER);
-            log.debug(responseBody);
-
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-    }
-
-    private void responseViaGet(String url) {
-        log.debug("responsing via GET");
-        ObjectMapper mapper = new ObjectMapper();
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
-
-            HttpGet httpGet = new HttpGet(url);
-            log.info("Executing request " + httpGet.getRequestLine());
-
-            RestProcessResource response =
-                    client.execute(httpGet, httpResponse -> mapper.readValue(httpResponse.getEntity().getContent(), RestProcessResource.class));
-
-            String docketName = response.getDocketName();
-            String rulesetName = response.getRulesetName();
-            String documentType = response.getDocumentType();
-            String title = response.getTitle();
-            String templateName = response.getProcessTemplateName();
-            String projectName = response.getProjectName();
-            int processId = response.getId();
-
-            log.debug("docketName = " + docketName);
-            log.debug("rulesetName = " + rulesetName);
-            log.debug("documentType = " + documentType);
-            log.debug("title = " + title);
-            log.debug("process template name = " + templateName); // null
-            log.debug("project name = " + projectName);
-            log.debug("process id = " + processId);
 
         } catch (IOException e) {
             // TODO Auto-generated catch block
