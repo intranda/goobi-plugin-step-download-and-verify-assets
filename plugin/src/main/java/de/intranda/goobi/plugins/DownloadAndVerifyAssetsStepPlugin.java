@@ -44,6 +44,7 @@ import org.apache.http.HttpEntity;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
+import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.StringEntity;
@@ -381,6 +382,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             case "post":
                 httpBase = new HttpPost(url);
                 break;
+            case "patch":
+                httpBase = new HttpPatch(url);
             default: // unknown
                 return;
         }
