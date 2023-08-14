@@ -60,6 +60,7 @@ import org.goobi.production.enums.PluginReturnValue;
 import org.goobi.production.enums.PluginType;
 import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
+import org.json.JSONObject;
 
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
@@ -79,16 +80,15 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private String title = "intranda_step_download_and_verify_assets";
     @Getter
     private Step step;
-    @Getter
-    private String value;
-    @Getter 
-    private boolean allowTaskFinishButtons;
+
     private String returnPath;
 
     private List<String> fileNameProperties = new ArrayList<>();
 
     private List<SingleResponse> successResponses = new ArrayList<>();
     private List<SingleResponse> errorResponses = new ArrayList<>();
+
+    private List<String> errorsList = new ArrayList<>();
 
     private Process process;
     private String masterFolder;
@@ -111,10 +111,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 
         // read parameters from correct block in configuration file
         SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
-        value = myconfig.getString("value", "default value"); 
-        allowTaskFinishButtons = myconfig.getBoolean("allowTaskFinishButtons", false);
         log.info("DownloadAndVerifyAssets step plugin initialized");
-        log.debug("value = " + value);
 
         List<Object> properties = myconfig.getList("fileNameProperty");
         for (Object property : properties) {
@@ -148,7 +145,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             SingleResponse response = new SingleResponse(responseType, responseMethod, responseUrl, responseJson);
             if ("success".equals(responseType)) {
                 successResponses.add(response);
-            } else {
+            } else if ("error".equals(responseType)) {
                 errorResponses.add(response);
             }
         }
@@ -200,7 +197,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public PluginReturnValue run() {
-        boolean successful = true;
         // your logic goes here
 
         // retrieve urls
@@ -208,13 +204,13 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // download and verify files
         for (String fileUrl : fileUrlsList) {
             log.debug("fileUrl = " + fileUrl);
-            //            processFile(fileUrl, masterFolder);
+            processFile(fileUrl, masterFolder);
         }
 
-        if (successful) {
-            // report success via REST to the BACH system
-            reportSuccess();
-        }
+        boolean successful = errorsList.isEmpty();
+
+        // report success / errors via REST to the BACH system
+        reportResults(successful);
 
         log.info("DownloadAndVerifyAssets step plugin executed");
         return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
@@ -263,13 +259,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private void processFile(String fileUrl, String targetFolder) {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
-        // check url
         URL url = null;
         try {
             url = new URL(fileUrl);
         } catch (MalformedURLException e) {
             String message = "the input URL is malformed: " + fileUrl;
-            reportError(message);
+            logError(message);
             return;
         }
 
@@ -281,16 +276,11 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             long checksumOrigin = downloadFile(url, targetPath);
 
             // check checksum
-            boolean passed = checkFileChecksum(checksumOrigin, targetPath);
-            log.debug("passed = " + passed);
-            if (!passed) {
-                String message = "checksums do not match";
-                reportError(message);
-            }
+            checkFileChecksum(checksumOrigin, targetPath);
 
         } catch (IOException e) {
-            String message = "failed to download the file from " + fileUrl;
-            reportError(message);
+            String message = "failed to download the file from: " + fileUrl;
+            logError(message);
         }
 
     }
@@ -333,7 +323,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return crc32;
     }
 
-    private boolean checkFileChecksum(long checksumOrigin, Path filePath) {
+    private void checkFileChecksum(long checksumOrigin, Path filePath) {
         CRC32 crc = new CRC32();
         try (InputStream in = new BufferedInputStream(new FileInputStream(filePath.toFile()))) {
             int c;
@@ -343,34 +333,47 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         } catch (IOException e) {
             String message = "failed to calculate the checksum of the downloaded file: " + filePath;
-            reportError(message);
-            return false;
+            logError(message);
+            return;
         }
 
         long checksum = crc.getValue();
         log.debug("crc value of downloaded file = " + checksum);
 
-        return checksum == checksumOrigin;
+        if (checksum != checksumOrigin) {
+            String message = "checksums do not match";
+            logError(message);
+        }
     }
 
-    private void reportError(String message) {
+    private void logError(String message) {
         log.error(message);
         Helper.addMessageToProcessJournal(process.getId(), LogType.ERROR, message);
-
-        // error report via REST to the BACH system
-
+        errorsList.add(message);
     }
 
-    private void reportSuccess() {
-        log.debug("success");
+    private void reportResults(boolean success) {
+        String logMessage = success ? "success" : "errors";
+        log.debug(logMessage);
 
-        for (SingleResponse response : successResponses) {
+        List<SingleResponse> responses = success ? successResponses : errorResponses;
+        for (SingleResponse response : responses) {
             String method = response.getMethod();
             String url = response.getUrl();
-            String json = response.getJson();
+            String jsonBase = response.getJson();
+            String json = generateJsonMessage(jsonBase);
+            log.debug("json = " + json);
             responseViaRest(method, url, json);
         }
+    }
 
+    private String generateJsonMessage(String jsonBase) {
+        JSONObject jsonObject = jsonBase == null ? new JSONObject() : new JSONObject(jsonBase);
+        log.debug("jsonObject = " + jsonObject.toString());
+
+        jsonObject.put("errors", errorsList);
+
+        return jsonObject.toString();
     }
 
     private void responseViaRest(String method, String url, String json) {
