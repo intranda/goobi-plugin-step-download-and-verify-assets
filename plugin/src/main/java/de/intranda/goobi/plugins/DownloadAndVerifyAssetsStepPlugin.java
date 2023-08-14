@@ -37,8 +37,20 @@ import java.util.Map;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
 
+import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.ResponseHandler;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.goobi.api.rest.model.RestProcessResource;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
@@ -49,10 +61,14 @@ import org.goobi.production.enums.PluginType;
 import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
@@ -73,8 +89,22 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private List<String> fileNameProperties = new ArrayList<>();
 
+    private List<SingleResponse> successResponses = new ArrayList<>();
+    private List<SingleResponse> errorResponses = new ArrayList<>();
+
     private Process process;
     private String masterFolder;
+
+    // create a custom response handler
+    private static final ResponseHandler<String> RESPONSE_HANDLER = response -> {
+        int status = response.getStatusLine().getStatusCode();
+        if (status >= 200 && status < 300) {
+            HttpEntity entity = response.getEntity();
+            return entity != null ? EntityUtils.toString(entity) : null;
+        } else {
+            throw new ClientProtocolException("Unexpected response status: " + status);
+        }
+    };
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -105,6 +135,25 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             e.printStackTrace();
         }
 
+        List<HierarchicalConfiguration> responsesConfigs = myconfig.configurationsAt("response");
+        for (HierarchicalConfiguration responseConfig : responsesConfigs) {
+            String responseType = responseConfig.getString("@type");
+            String responseMethod = responseConfig.getString("@method");
+            String responseUrl = responseConfig.getString("@url");
+            String responseJson = responseConfig.getString(".");
+
+            log.debug("responseType = " + responseType);
+            log.debug("responseMethod = " + responseMethod);
+            log.debug("responseUrl = " + responseUrl);
+            log.debug("responseJson = " + responseJson);
+
+            SingleResponse response = new SingleResponse(responseType, responseMethod, responseUrl, responseJson);
+            if ("success".equals(responseType)) {
+                successResponses.add(response);
+            } else {
+                errorResponses.add(response);
+            }
+        }
     }
 
     @Override
@@ -161,7 +210,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // download and verify files
         for (String fileUrl : fileUrlsList) {
             log.debug("fileUrl = " + fileUrl);
-            processFile(fileUrl, masterFolder);
+            //            processFile(fileUrl, masterFolder);
         }
 
         if (successful) {
@@ -316,6 +365,108 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private void reportSuccess() {
         log.debug("success");
+
+        for (SingleResponse response : successResponses) {
+            String method = response.getMethod();
+            String url = response.getUrl();
+            String json = response.getJson();
+            responseViaRest(method, url, json);
+        }
+
+    }
+
+    private void responseViaRest(String method, String url, String json) {
+        switch (method.toLowerCase()) {
+            case "put":
+                responseViaPut(url, json);
+                break;
+            case "post":
+                responseViaPost(url, json);
+                break;
+            default: // get
+                responseViaGet(url);
+                break;
+        }
+    }
+
+    private void responseViaPut(String url, String json) {
+        log.debug("responsing via PUT");
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            HttpPut httpPut = new HttpPut(url);
+            httpPut.setHeader("Accept", "application/json");
+            httpPut.setHeader("Content-type", "application/json");
+            httpPut.setEntity(new StringEntity(json));
+
+            log.info("Executing request " + httpPut.getRequestLine());
+
+            String responseBody = client.execute(httpPut, RESPONSE_HANDLER);
+            log.debug(responseBody);
+
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    private void responseViaPost(String url, String json) {
+        log.debug("responsing via POST");
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            HttpPost httpPost = new HttpPost(url);
+            httpPost.setHeader("Accept", "application/json");
+            httpPost.setHeader("Content-type", "application/json");
+            httpPost.setEntity(new StringEntity(json));
+
+            log.info("Executing request " + httpPost.getRequestLine());
+
+            String responseBody = client.execute(httpPost, RESPONSE_HANDLER);
+            log.debug(responseBody);
+
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    private void responseViaGet(String url) {
+        log.debug("responsing via GET");
+        ObjectMapper mapper = new ObjectMapper();
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+
+            HttpGet httpGet = new HttpGet(url);
+            log.info("Executing request " + httpGet.getRequestLine());
+
+            RestProcessResource response =
+                    client.execute(httpGet, httpResponse -> mapper.readValue(httpResponse.getEntity().getContent(), RestProcessResource.class));
+
+            String docketName = response.getDocketName();
+            String rulesetName = response.getRulesetName();
+            String documentType = response.getDocumentType();
+            String title = response.getTitle();
+            String templateName = response.getProcessTemplateName();
+            String projectName = response.getProjectName();
+            int processId = response.getId();
+
+            log.debug("docketName = " + docketName);
+            log.debug("rulesetName = " + rulesetName);
+            log.debug("documentType = " + documentType);
+            log.debug("title = " + title);
+            log.debug("process template name = " + templateName); // null
+            log.debug("project name = " + projectName);
+            log.debug("process id = " + processId);
+
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    @Data
+    @AllArgsConstructor
+    private class SingleResponse {
+        private String type;
+        private String method;
+        private String url;
+        private String json;
     }
 
 
