@@ -341,7 +341,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         log.debug("crc value of downloaded file = " + checksum);
 
         if (checksum != checksumOrigin) {
-            String message = "checksums do not match";
+            String message = "checksums do not match, the file might be corrupted: " + filePath;
             logError(message);
         }
     }
