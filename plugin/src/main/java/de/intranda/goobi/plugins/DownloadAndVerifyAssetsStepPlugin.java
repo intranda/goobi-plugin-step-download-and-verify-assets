@@ -90,6 +90,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private List<String> errorsList = new ArrayList<>();
 
+    private int maxTryTimes;
+
     private Process process;
     private String masterFolder;
 
@@ -117,6 +119,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         for (Object property : properties) {
             fileNameProperties.add(String.valueOf(property));
         }
+
+        maxTryTimes = myconfig.getInt("maxTryTimes", 3);
 
         process = step.getProzess();
         log.debug("process id = " + process.getId());
@@ -201,13 +205,20 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         // retrieve urls
         List<String> fileUrlsList = prepareFileUrlsList();
-        // download and verify files
-        for (String fileUrl : fileUrlsList) {
-            log.debug("fileUrl = " + fileUrl);
-            processFile(fileUrl, masterFolder);
+
+        for (int i = 0; i < maxTryTimes; ++i) {
+            // get the list of files that are not successfully processed yet
+            fileUrlsList = processAllFiles(fileUrlsList);
         }
 
-        boolean successful = errorsList.isEmpty();
+        boolean successful = fileUrlsList.isEmpty();
+
+        if (!successful) {
+            for (String fileUrl : fileUrlsList) {
+                String message = "Failed " + maxTryTimes + " times to download and validate the file from: " + fileUrl;
+                logError(message);
+            }
+        }
 
         // report success / errors via REST to the BACH system
         reportResults(successful);
@@ -256,7 +267,22 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
     }
 
-    private void processFile(String fileUrl, String targetFolder) {
+    private List<String> processAllFiles(List<String> fileUrlsList) {
+        List<String> unsuccessfulList = new ArrayList<>();
+        // download and verify files
+        for (String fileUrl : fileUrlsList) {
+            log.debug("fileUrl = " + fileUrl);
+            try {
+                processFile(fileUrl, masterFolder);
+            } catch (Exception e) {
+                unsuccessfulList.add(fileUrl);
+            }
+        }
+
+        return unsuccessfulList;
+    }
+
+    private void processFile(String fileUrl, String targetFolder) throws IOException {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
         URL url = null;
@@ -272,17 +298,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         Path targetPath = Path.of(targetFolder, fileName);
 
         // url is correctly formed, download the file
-        try {
-            long checksumOrigin = downloadFile(url, targetPath);
+        long checksumOrigin = downloadFile(url, targetPath);
 
-            // check checksum
-            checkFileChecksum(checksumOrigin, targetPath);
-
-        } catch (IOException e) {
-            String message = "failed to download the file from: " + fileUrl;
-            logError(message);
-        }
-
+        // check checksum
+        checkFileChecksum(checksumOrigin, targetPath);
     }
 
     /**
@@ -323,26 +342,26 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return crc32;
     }
 
-    private void checkFileChecksum(long checksumOrigin, Path filePath) {
+    private void checkFileChecksum(long checksumOrigin, Path filePath) throws IOException {
         CRC32 crc = new CRC32();
         try (InputStream in = new BufferedInputStream(new FileInputStream(filePath.toFile()))) {
             int c;
             while ((c = in.read()) != -1) {
                 crc.update(c);
             }
-
-        } catch (IOException e) {
-            String message = "failed to calculate the checksum of the downloaded file: " + filePath;
-            logError(message);
-            return;
         }
 
+        // the following two lines are used to test the error reporting logic
+        //        boolean useChecksum = Math.random() > 0.5; // NOSONAR
+        //        long checksum = useChecksum ? crc.getValue() : -1; // NOSONAR
         long checksum = crc.getValue();
         log.debug("crc value of downloaded file = " + checksum);
 
         if (checksum != checksumOrigin) {
             String message = "checksums do not match, the file might be corrupted: " + filePath;
-            logError(message);
+            // delete the downloaded file
+            filePath.toFile().delete();
+            throw new IOException(message);
         }
     }
 
