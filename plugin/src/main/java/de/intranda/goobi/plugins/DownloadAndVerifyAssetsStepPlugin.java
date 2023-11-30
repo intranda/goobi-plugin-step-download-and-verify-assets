@@ -128,11 +128,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             fileNameProperties.add(new FileNameProperty(name, hash, folder));
         }
 
-        //        List<Object> properties = config.getList("fileNameProperty");
-        //        for (Object property : properties) {
-        //            fileNameProperties.add(String.valueOf(property));
-        //        }
-
         maxTryTimes = config.getInt("maxTryTimes", 3);
 
         process = step.getProzess();
@@ -216,8 +211,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     public PluginReturnValue run() {
         // your logic goes here
 
-        // retrieve urls
-        //        List<String> fileUrlsList = prepareFileUrlsList();
         prepareUrlHashMap();
 
         for (int i = 0; i < maxTryTimes; ++i) {
@@ -226,20 +219,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         boolean successful = urlHashMap.isEmpty();
 
-        //        for (int i = 0; i < maxTryTimes; ++i) {
-        //            // get the list of files that are not successfully processed yet
-        //            //            fileUrlsList = processAllFiles(fileUrlsList);
-        //            fileNameProperties = processAllFiles(fileNameProperties);
-        //        }
-
-        //        boolean successful = fileNameProperties.isEmpty();
-
         if (!successful) {
-            //            for (FileNameProperty file : fileNameProperties) {
-            //                String message = "Failed " + maxTryTimes + " times to download and validate the file from: " + fileUrl;
-            //                logError(message);
-            //            }
-
             for (String fileUrl : urlHashMap.keySet()) {
                 String message = "Failed " + maxTryTimes + " times to download and validate the file from: " + fileUrl;
                 logError(message);
@@ -253,63 +233,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
     }
 
-    //    @Override
-    //    public PluginReturnValue run() {
-    //        // your logic goes here
-    //
-    //        // retrieve urls
-    //        List<String> fileUrlsList = prepareFileUrlsList();
-    //
-    //        for (int i = 0; i < maxTryTimes; ++i) {
-    //            // get the list of files that are not successfully processed yet
-    //            fileUrlsList = processAllFiles(fileUrlsList);
-    //        }
-    //
-    //        boolean successful = fileUrlsList.isEmpty();
-    //
-    //        if (!successful) {
-    //            for (String fileUrl : fileUrlsList) {
-    //                String message = "Failed " + maxTryTimes + " times to download and validate the file from: " + fileUrl;
-    //                logError(message);
-    //            }
-    //        }
-    //
-    //        // report success / errors via REST to the BACH system
-    //        reportResults(successful);
-    //
-    //        log.info("DownloadAndVerifyAssets step plugin executed");
-    //        return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
-    //    }
-
-    private List<String> prepareFileUrlsList() {
-        List<String> urlsList = new ArrayList<>();
-        //        Map<String, String> propertiesMap = preparePropertiesMap();
-        //        for (String fileNameProperty : fileNameProperties) {
-        //            if (propertiesMap.containsKey(fileNameProperty)) {
-        //                log.debug("found property = " + fileNameProperty);
-        //                String propertyValue = propertiesMap.get(fileNameProperty);
-        //                log.debug("propertyValue = " + propertyValue);
-        //                addUrlsToList(propertyValue, urlsList);
-        //            }
-        //        }
-
-        Map<String, List<String>> propertiesMap = preparePropertiesMap();
-
-        for (FileNameProperty fileNameProperty : fileNameProperties) {
-            String propertyName = fileNameProperty.getName();
-            if (propertiesMap.containsKey(propertyName)) {
-                log.debug("found property = " + propertyName);
-                String hashProperty = fileNameProperty.getHash();
-                log.debug("the according hash property is: " + hashProperty);
-                List<String> propertyValues = propertiesMap.get(propertyName);
-                log.debug("propertyValue has " + propertyValues.size() + " elements");
-                addUrlsToList(propertyValues, urlsList);
-            }
-        }
-
-        return urlsList;
-    }
-
     private void prepareUrlHashMap() {
         Map<String, List<String>> propertiesMap = preparePropertiesMap();
 
@@ -318,7 +241,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             String hashPropertyName = fileNameProperty.getHash();
             if (propertiesMap.containsKey(propertyName) && propertiesMap.containsKey(hashPropertyName)) {
                 log.debug("found property = " + propertyName);
-                //                String hashPropertyName = fileNameProperty.getHash();
                 log.debug("the name of the according hash property is: " + hashPropertyName);
                 List<Long> hashValues = propertiesMap.get(hashPropertyName)
                         .stream()
@@ -327,25 +249,11 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
                 List<String> urls = propertiesMap.get(propertyName);
                 log.debug("urls has " + urls.size() + " elements");
-                //                addUrlsToList(propertyValues, urlsList);
-
                 addUrlHashPairs(urls, hashValues);
             }
         }
-
     }
 
-    //    private Map<String, String> preparePropertiesMap() {
-    //        List<Processproperty> properties = process.getEigenschaftenList();
-    //        Map<String, String> propertiesMap = new HashMap<>();
-    //        for (Processproperty property : properties) {
-    //            String key = property.getTitel();
-    //            String value = property.getWert();
-    //            propertiesMap.put(key, value);
-    //        }
-    //
-    //        return propertiesMap;
-    //    }
 
     private Map<String, List<String>> preparePropertiesMap() {
         List<Processproperty> properties = process.getEigenschaftenList();
@@ -355,12 +263,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             String value = property.getWert();
 
             propertiesMap.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
-
-            //            if (propertiesMap.containsKey(key)) {
-            //                propertiesMap.get(key).add(value);
-            //            } else {
-            //                propertiesMap.put(key, Arrays.asList(value));
-            //            }
         }
 
         return propertiesMap;
@@ -385,61 +287,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
     }
 
-    //    private List<String> processAllFiles(List<String> fileUrlsList) {
-    //        List<String> unsuccessfulList = new ArrayList<>();
-    //        // download and verify files
-    //        for (String fileUrl : fileUrlsList) {
-    //            log.debug("fileUrl = " + fileUrl);
-    //            try {
-    //                processFile(fileUrl, masterFolder);
-    //            } catch (Exception e) {
-    //                unsuccessfulList.add(fileUrl);
-    //            }
-    //        }
-    //
-    //        return unsuccessfulList;
-    //    }
-
-    //    private List<FileNameProperty> processAllFiles(List<FileNameProperty> fileNameProperties) {
-    //        List<FileNameProperty> unsuccessfulList = new ArrayList<>();
-    //        // download and verify files
-    //        //        for (String fileUrl : fileUrlsList) {
-    //        //            log.debug("fileUrl = " + fileUrl);
-    //        //            try {
-    //        //                processFile(fileUrl, masterFolder);
-    //        //            } catch (Exception e) {
-    //        //                unsuccessfulList.add(fileUrl);
-    //        //            }
-    //        //        }
-    //
-    //        for (FileNameProperty file : fileNameProperties) {
-    //            Map<String, Long> urlHashMap = file.getUrlHashMap();
-    //            for (Map.Entry<String, Long> urlHashPair : urlHashMap.entrySet()) {
-    //                String url = urlHashPair.getKey();
-    //                //                long hash = urlHashPair.getValue();
-    //                long hash = popUrlHashPair(url);
-    //                log.debug("url = " + url);
-    //                try {
-    //                    processFile(url, hash, masterFolder);
-    //                } catch (Exception e) {
-    //                    addUrlHashPair(url, hash);
-    //                    unsuccessfulList.add(file);
-    //                }
-    //            }
-    //        }
-    //
-    //        return unsuccessfulList;
-    //    }
-
     private Map<String, Long> processAllFiles(Map<String, Long> urlHashMap) {
         Map<String, Long> unsuccessfulMap = new HashMap<>();
         // download and verify files
-        //        for (FileNameProperty file : fileNameProperties) {
-        //            Map<String, Long> urlHashMap = file.getUrlHashMap();
         for (Map.Entry<String, Long> urlHashPair : urlHashMap.entrySet()) {
             String url = urlHashPair.getKey();
             long hash = urlHashPair.getValue();
-            //            long hash = urlHashMap.remove(url);
             log.debug("url = " + url);
             log.debug("hash = " + hash);
             try {
@@ -448,7 +301,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 unsuccessfulMap.put(url, hash);
             }
         }
-        //        }
 
         return unsuccessfulMap;
     }
@@ -459,6 +311,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         URL url = null;
         try {
             url = new URL(fileUrl);
+
         } catch (MalformedURLException e) {
             String message = "the input URL is malformed: " + fileUrl;
             logError(message);
@@ -474,28 +327,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // check checksum
         checkFileChecksum(hash, targetPath);
     }
-
-    //    private void processFile(String fileUrl, String targetFolder) throws IOException {
-    //        // prepare URL
-    //        log.debug("downloading file from url: " + fileUrl);
-    //        URL url = null;
-    //        try {
-    //            url = new URL(fileUrl);
-    //        } catch (MalformedURLException e) {
-    //            String message = "the input URL is malformed: " + fileUrl;
-    //            logError(message);
-    //            return;
-    //        }
-    //
-    //        String fileName = getFileNameFromUrl(url);
-    //        Path targetPath = Path.of(targetFolder, fileName);
-    //
-    //        // url is correctly formed, download the file
-    //        long checksumOrigin = downloadFile(url, targetPath);
-    //
-    //        // check checksum
-    //        checkFileChecksum(checksumOrigin, targetPath);
-    //    }
 
     /**
      * get the file name from a URL object
@@ -660,9 +491,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         private String name;
         private String hash;
         private String folder;
-        //        private List<String> urlList = new ArrayList<>();
-        //        private List<Long> hashList = new ArrayList<>();
-        private Map<String, Long> urlHashMap = new HashMap<>();
 
         public FileNameProperty(String name, String hash, String folder) {
             this.name = name;
@@ -675,41 +503,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             this.hash = hash;
             this.folder = "master";
         }
-
-        //        public void addUrl(String url) {
-        //            urlList.add(url);
-        //        }
-        //
-        //        public void addHash(long hash) {
-        //            hashList.add(hash);
-        //        }
-
-        //        public void addUrlHashPair(String url, long hash) {
-        //            urlHashMap.put(url, hash);
-        //        }
-        //
-        //        public boolean addUrlHashPairs(List<String> urls, List<Long> hashes) {
-        //            if (urls == null || hashes == null) {
-        //                log.debug("urls or hashes is null");
-        //                return false;
-        //            }
-        //
-        //            if (urls.size() != hashes.size()) {
-        //                log.debug("urls and hashes are of different sizes");
-        //                return false;
-        //            }
-        //
-        //            for (int i = 0; i < urls.size(); ++i) {
-        //                urlHashMap.put(urls.get(i), hashes.get(i));
-        //                log.debug("URL-Hash pair added: " + urls.get(i) + " -> " + hashes.get(i));
-        //            }
-        //
-        //            return true;
-        //        }
-        //
-        //        public long popUrlHashPair(String url) {
-        //            return urlHashMap.remove(url);
-        //        }
     }
 
 }
