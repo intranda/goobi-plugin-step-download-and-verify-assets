@@ -39,6 +39,7 @@ import java.util.zip.CheckedInputStream;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.ResponseHandler;
@@ -154,16 +155,18 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         List<HierarchicalConfiguration> responsesConfigs = config.configurationsAt("response");
         for (HierarchicalConfiguration responseConfig : responsesConfigs) {
             String responseType = responseConfig.getString("@type");
-            String responseMethod = responseConfig.getString("@method");
-            String responseUrl = responseConfig.getString("@url");
-            String responseJson = responseConfig.getString(".");
+            String responseMethod = responseConfig.getString("@method", "");
+            String responseUrl = responseConfig.getString("@url", "");
+            String responseJson = responseConfig.getString(".", "");
+            String responseMessage = responseConfig.getString("@message", "");
 
             log.debug("responseType = " + responseType);
             log.debug("responseMethod = " + responseMethod);
             log.debug("responseUrl = " + responseUrl);
             log.debug("responseJson = " + responseJson);
+            log.debug("responseMessage = " + responseMessage);
 
-            SingleResponse response = new SingleResponse(responseType, responseMethod, responseUrl, responseJson);
+            SingleResponse response = new SingleResponse(responseType, responseMethod, responseUrl, responseJson, responseMessage);
             if ("success".equals(responseType)) {
                 successResponses.add(response);
             } else if ("error".equals(responseType)) {
@@ -387,6 +390,21 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return crc32;
     }
 
+    private void logMessage(LogType logType, String message) {
+        switch (logType) {
+            case ERROR:
+                log.error(message);
+            case DEBUG:
+                log.debug(message);
+            case WARN:
+                log.warn(message);
+            default: // INFO
+                log.info(message);
+        }
+
+        Helper.addMessageToProcessJournal(process.getId(), logType, message);
+    }
+
     private void logError(String message) {
         log.error(message);
         Helper.addMessageToProcessJournal(process.getId(), LogType.ERROR, message);
@@ -400,11 +418,20 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         List<SingleResponse> responses = success ? successResponses : errorResponses;
         for (SingleResponse response : responses) {
             String method = response.getMethod();
-            String url = response.getUrl();
-            String jsonBase = response.getJson();
-            String json = generateJsonMessage(jsonBase);
-            log.debug("json = " + json);
-            responseViaRest(method, url, json);
+            if (StringUtils.isBlank(method)) {
+                // use journal
+                String message = response.getMessage();
+                LogType logType = success ? LogType.INFO : LogType.ERROR;
+                logMessage(logType, message);
+
+            } else {
+                String url = response.getUrl();
+                String jsonBase = response.getJson();
+                String json = generateJsonMessage(jsonBase);
+                log.debug("json = " + json);
+                responseViaRest(method, url, json);
+            }
+
         }
     }
 
@@ -455,25 +482,15 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         private String method;
         private String url;
         private String json;
+        private String message;
     }
 
     @Data
+    @AllArgsConstructor
     private class FileNameProperty {
         private String name;
         private String hash;
         private String folder;
-
-        public FileNameProperty(String name, String hash, String folder) {
-            this.name = name;
-            this.hash = hash;
-            this.folder = folder;
-        }
-
-        public FileNameProperty(String name, String hash) {
-            this.name = name;
-            this.hash = hash;
-            this.folder = "master";
-        }
     }
 
 }
