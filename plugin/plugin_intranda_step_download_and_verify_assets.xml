@@ -11,15 +11,56 @@
         <!-- which projects to use for (can be more then one, otherwise use *) -->
         <project>*</project>
         <step>*</step>
+        <!-- Configure here how many times shall be maximally tried before reporting final results. OPTIONAL. DEFAULT 1. -->
+        <maxTryTimes>3</maxTryTimes>
         
-        <fileNameProperty>mainText</fileNameProperty>
-        <fileNameProperty>assets</fileNameProperty>
-        <fileNameProperty>protocol</fileNameProperty>
+        <!-- This tag accepts the following three attributes:
+              - @urlProperty: name of the property that holds the URL of the file
+              - @hashProperty: name of the property that holds the checksum of the file
+              - @folder: configured name of the target folder that shall be used to download the file. OPTIONAL. DEFAULT master.
+         -->
+        <fileNameProperty urlProperty="mainText" hashProperty="mainTextHash" folder="master" />
+        <fileNameProperty urlProperty="asset" hashProperty="assetHash" folder="media" />
+        <!-- use the default setting "master" of @folder -->
+        <fileNameProperty urlProperty="protocol" hashProperty="protocolHash" />
         
-        <!-- sample parameter -->
-        <value>test</value>
-        <!-- display button to finish the task directly from within the entered plugin -->
-        <allowTaskFinishButtons>true</allowTaskFinishButtons>
+        <!-- A response tag accepts four attributes:
+              - @type: success | error. Determines by which cases this configured response shall be activated.
+              - @method: OPTIONAL. If not configured or configured blankly, then the response will be performed via journal logs. Non-blank configuration options are: put | post | patch.
+              - @url: URL to the target system expecting this response. MANDATORY if @method is not blank.. 
+              - @message: Message that shall be logged into journal. ONLY needed when @method is blank.
+              - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+              One can also define a JSON string inside a pair of these tags, which will be used as JSON body to shoot a REST request.
+         -->
+        <response type="success" method="put" url="CHANGE_ME">
+        {
+           "id": 0,
+           "name": "string",
+           "value": "string"
+        }
+        </response>
+        <response type="success" method="post" url="CHANGE_ME">
+        {
+           "id": 0,
+           "title": "string",
+           "value": "string",
+           "key": "value"
+        }
+        </response>
+        
+        <response type="error" method="put" url="CHANGE_ME">
+        {
+           "id": 6,
+           "name": "error",
+           "value": "yes",
+           "remark": "anything"
+        }
+        </response>
+        
+        <!-- Log ERROR_MESSAGE into journal as a signal of errors -->
+        <response type="error" message="ERROR_MESSAGE" />
+        <!-- Usage of Goobi variables in @url as well as @message is allowed. -->
+        <response type="success" method="put" url="URL_TO_BACH/upload_successful/{meta.ThesisId}" />
     </config>
 
 </config_plugin>

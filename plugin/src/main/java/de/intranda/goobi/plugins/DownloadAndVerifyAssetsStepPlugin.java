@@ -66,6 +66,7 @@ import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.StorageProviderInterface;
+import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import lombok.AllArgsConstructor;
@@ -73,6 +74,10 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
+import ugh.dl.DigitalDocument;
+import ugh.dl.Prefs;
+import ugh.exceptions.PreferencesException;
+import ugh.exceptions.ReadException;
 
 @PluginImplementation
 @Log4j2
@@ -96,6 +101,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private int maxTryTimes;
 
     private Process process;
+    private VariableReplacer replacer;
+
     private String masterFolder;
 
     private Map<String, Long> urlHashMap = new HashMap<>();
@@ -119,6 +126,15 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         process = step.getProzess();
         log.debug("process id = " + process.getId());
+
+        // initialize VariableReplacer
+        try {
+            DigitalDocument dd = process.readMetadataFile().getDigitalDocument();
+            Prefs prefs = process.getRegelsatz().getPreferences();
+            replacer = new VariableReplacer(dd, prefs, process, step);
+        } catch (ReadException | IOException | SwapException | PreferencesException e) {
+            logError("Exception happened during initialization: " + e.getMessage());
+        }
                 
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
@@ -126,7 +142,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
         for (HierarchicalConfiguration fileNameConfig : fileNamePropertyConfigs) {
-            String name = fileNameConfig.getString(".");
+            String name = fileNameConfig.getString("@urlProperty", "");
             String hash = fileNameConfig.getString("@hashProperty", "");
             String folder = fileNameConfig.getString("@folder", "master");
             
@@ -141,7 +157,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             }
         }
 
-        maxTryTimes = config.getInt("maxTryTimes", 3);
+        maxTryTimes = config.getInt("maxTryTimes", 1);
 
         try {
             masterFolder = process.getImagesOrigDirectory(false);
@@ -166,7 +182,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             log.debug("responseJson = " + responseJson);
             log.debug("responseMessage = " + responseMessage);
 
-            SingleResponse response = new SingleResponse(responseType, responseMethod, responseUrl, responseJson, responseMessage);
+            String responseUrlReplaced = replacer.replace(responseUrl);
+            String responseMessageReplaced = replacer.replace(responseMessage);
+            log.debug("responseUrlReplaced = " + responseUrlReplaced);
+            log.debug("responseMessageReplaced = " + responseMessageReplaced);
+
+            SingleResponse response = new SingleResponse(responseType, responseMethod, responseUrlReplaced, responseJson, responseMessageReplaced);
             if ("success".equals(responseType)) {
                 successResponses.add(response);
             } else if ("error".equals(responseType)) {
