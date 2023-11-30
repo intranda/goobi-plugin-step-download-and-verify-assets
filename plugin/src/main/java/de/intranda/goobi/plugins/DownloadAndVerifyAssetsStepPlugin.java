@@ -63,6 +63,8 @@ import org.json.JSONObject;
 
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
+import de.sub.goobi.helper.StorageProvider;
+import de.sub.goobi.helper.StorageProviderInterface;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import lombok.AllArgsConstructor;
@@ -74,6 +76,7 @@ import net.xeoh.plugins.base.annotations.PluginImplementation;
 @PluginImplementation
 @Log4j2
 public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
+    private static final StorageProviderInterface storageProvider = StorageProvider.getInstance();
     
     @Getter
     private String title = "intranda_step_download_and_verify_assets";
@@ -95,6 +98,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private String masterFolder;
 
     private Map<String, Long> urlHashMap = new HashMap<>();
+    private Map<String, String> urlFolderMap = new HashMap<>();
 
     // create a custom response handler
     private static final ResponseHandler<String> RESPONSE_HANDLER = response -> {
@@ -111,6 +115,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     public void initialize(Step step, String returnPath) {
         this.returnPath = returnPath;
         this.step = step;
+
+        process = step.getProzess();
+        log.debug("process id = " + process.getId());
                 
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
@@ -121,13 +128,19 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             String name = fileNameConfig.getString(".");
             String hash = fileNameConfig.getString("@hashProperty", "");
             String folder = fileNameConfig.getString("@folder", "master");
-            fileNameProperties.add(new FileNameProperty(name, hash, folder));
+            
+            try {
+                String folderPath = process.getConfiguredImageFolder(folder);
+                log.debug("folderPath with name '" + folder + "' is: " + folderPath);
+                fileNameProperties.add(new FileNameProperty(name, hash, folderPath));
+
+            } catch (IOException | SwapException | DAOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
         }
 
         maxTryTimes = config.getInt("maxTryTimes", 3);
-
-        process = step.getProzess();
-        log.debug("process id = " + process.getId());
 
         try {
             masterFolder = process.getImagesOrigDirectory(false);
@@ -209,7 +222,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         prepareUrlHashMap();
 
         for (int i = 0; i < maxTryTimes; ++i) {
-            urlHashMap = processAllFiles(urlHashMap);
+            urlHashMap = processAllFiles(urlHashMap, urlFolderMap);
         }
 
         boolean successful = urlHashMap.isEmpty();
@@ -244,12 +257,14 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
                 List<String> urls = propertiesMap.get(propertyName);
                 log.debug("urls has " + urls.size() + " elements");
-                addUrlHashPairs(urls, hashValues);
+
+                String folder = fileNameProperty.getFolder();
+                addUrlHashPairs(urls, hashValues, folder);
             }
         }
     }
 
-    private boolean addUrlHashPairs(List<String> urls, List<Long> hashes) {
+    private boolean addUrlHashPairs(List<String> urls, List<Long> hashes, String folder) {
         if (urls == null || hashes == null) {
             log.debug("urls or hashes is null");
             return false;
@@ -261,8 +276,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         for (int i = 0; i < urls.size(); ++i) {
-            urlHashMap.put(urls.get(i), hashes.get(i));
-            log.debug("URL-Hash pair added: " + urls.get(i) + " -> " + hashes.get(i));
+            String url = urls.get(i);
+            long hash = hashes.get(i);
+            urlHashMap.put(url, hash);
+            urlFolderMap.put(url, folder);
+            log.debug("URL-Hash pair added: " + url + " -> " + hash);
+            log.debug("URL-folder pair added: " + url + " -> " + folder);
         }
 
         return true;
@@ -281,16 +300,17 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return propertiesMap;
     }
 
-    private Map<String, Long> processAllFiles(Map<String, Long> urlHashMap) {
+    private Map<String, Long> processAllFiles(Map<String, Long> urlHashMap, Map<String, String> urlFolderMap) {
         Map<String, Long> unsuccessfulMap = new HashMap<>();
         // download and verify files
         for (Map.Entry<String, Long> urlHashPair : urlHashMap.entrySet()) {
             String url = urlHashPair.getKey();
             long hash = urlHashPair.getValue();
-            log.debug("url = " + url);
-            log.debug("hash = " + hash);
+            String targetFolder = urlFolderMap.get(url);
+
             try {
-                processFile(url, hash, masterFolder);
+                processFile(url, hash, targetFolder);
+
             } catch (Exception e) {
                 unsuccessfulMap.put(url, hash);
             }
@@ -313,13 +333,15 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         String fileName = getFileNameFromUrl(url);
-        Path targetPath = Path.of(targetFolder, fileName);
+        Path targetFolderPath = Path.of(targetFolder);
+        storageProvider.createDirectories(targetFolderPath);
+        Path targetPath = targetFolderPath.resolve(fileName);
 
         // url is correctly formed, download the file
-        long checksumOrigin = downloadFile(url, targetPath);
+        long checksumDownloaded = downloadFile(url, targetPath);
 
         // check checksum
-        if (hash != checksumOrigin) {
+        if (hash != checksumDownloaded) {
             String message = "checksums do not match, the file might be corrupted: " + targetPath;
             // delete the downloaded file
             targetPath.toFile().delete();
