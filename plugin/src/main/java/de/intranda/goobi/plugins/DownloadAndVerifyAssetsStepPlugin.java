@@ -19,8 +19,6 @@
 
 package de.intranda.goobi.plugins;
 
-import java.io.BufferedInputStream;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -83,8 +81,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private Step step;
 
     private String returnPath;
-
-    //    private List<String> fileNameProperties = new ArrayList<>();
 
     private List<FileNameProperty> fileNameProperties = new ArrayList<>();
 
@@ -210,7 +206,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     @Override
     public PluginReturnValue run() {
         // your logic goes here
-
         prepareUrlHashMap();
 
         for (int i = 0; i < maxTryTimes; ++i) {
@@ -254,6 +249,24 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
     }
 
+    private boolean addUrlHashPairs(List<String> urls, List<Long> hashes) {
+        if (urls == null || hashes == null) {
+            log.debug("urls or hashes is null");
+            return false;
+        }
+
+        if (urls.size() != hashes.size()) {
+            log.debug("urls and hashes are of different sizes");
+            return false;
+        }
+
+        for (int i = 0; i < urls.size(); ++i) {
+            urlHashMap.put(urls.get(i), hashes.get(i));
+            log.debug("URL-Hash pair added: " + urls.get(i) + " -> " + hashes.get(i));
+        }
+
+        return true;
+    }
 
     private Map<String, List<String>> preparePropertiesMap() {
         List<Processproperty> properties = process.getEigenschaftenList();
@@ -266,25 +279,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         return propertiesMap;
-    }
-
-    private void addUrlsToList(String propertyValue, List<String> urlsList) {
-        if (!propertyValue.contains(",")) {
-            urlsList.add(propertyValue);
-            return;
-        }
-
-        // multiple urls separated by comma
-        String[] urls = propertyValue.split(",");
-        for (String url : urls) {
-            urlsList.add(url);
-        }
-    }
-
-    private void addUrlsToList(List<String> propertyValues, List<String> urlsList) {
-        for (String propertyValue : propertyValues) {
-            addUrlsToList(propertyValue, urlsList);
-        }
     }
 
     private Map<String, Long> processAllFiles(Map<String, Long> urlHashMap) {
@@ -325,7 +319,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         long checksumOrigin = downloadFile(url, targetPath);
 
         // check checksum
-        checkFileChecksum(hash, targetPath);
+        if (hash != checksumOrigin) {
+            String message = "checksums do not match, the file might be corrupted: " + targetPath;
+            // delete the downloaded file
+            targetPath.toFile().delete();
+            throw new IOException(message);
+        }
     }
 
     /**
@@ -364,29 +363,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         long crc32 = crc.getValue();
         log.debug("crc32 = " + crc32);
         return crc32;
-    }
-
-    private void checkFileChecksum(long checksumOrigin, Path filePath) throws IOException {
-        CRC32 crc = new CRC32();
-        try (InputStream in = new BufferedInputStream(new FileInputStream(filePath.toFile()))) {
-            int c;
-            while ((c = in.read()) != -1) {
-                crc.update(c);
-            }
-        }
-
-        // the following two lines are used to test the error reporting logic
-        //        boolean useChecksum = Math.random() > 0.5; // NOSONAR
-        //        long checksum = useChecksum ? crc.getValue() : -1; // NOSONAR
-        long checksum = crc.getValue();
-        log.debug("crc value of downloaded file = " + checksum);
-
-        if (checksum != checksumOrigin) {
-            String message = "checksums do not match, the file might be corrupted: " + filePath;
-            // delete the downloaded file
-            filePath.toFile().delete();
-            throw new IOException(message);
-        }
     }
 
     private void logError(String message) {
@@ -448,33 +424,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
-    }
-
-    private void addUrlHashPair(String url, long hash) {
-        urlHashMap.put(url, hash);
-    }
-
-    private boolean addUrlHashPairs(List<String> urls, List<Long> hashes) {
-        if (urls == null || hashes == null) {
-            log.debug("urls or hashes is null");
-            return false;
-        }
-
-        if (urls.size() != hashes.size()) {
-            log.debug("urls and hashes are of different sizes");
-            return false;
-        }
-
-        for (int i = 0; i < urls.size(); ++i) {
-            urlHashMap.put(urls.get(i), hashes.get(i));
-            log.debug("URL-Hash pair added: " + urls.get(i) + " -> " + hashes.get(i));
-        }
-
-        return true;
-    }
-
-    public long popUrlHashPair(String url) {
-        return urlHashMap.remove(url);
     }
 
     @Data
