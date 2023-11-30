@@ -83,7 +83,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private String returnPath;
 
-    private List<String> fileNameProperties = new ArrayList<>();
+    //    private List<String> fileNameProperties = new ArrayList<>();
+
+    private List<FileNameProperty> fileNameProperties = new ArrayList<>();
 
     private List<SingleResponse> successResponses = new ArrayList<>();
     private List<SingleResponse> errorResponses = new ArrayList<>();
@@ -112,15 +114,23 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         this.step = step;
                 
         // read parameters from correct block in configuration file
-        SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
+        SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
         log.info("DownloadAndVerifyAssets step plugin initialized");
 
-        List<Object> properties = myconfig.getList("fileNameProperty");
-        for (Object property : properties) {
-            fileNameProperties.add(String.valueOf(property));
+        List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
+        for (HierarchicalConfiguration fileNameConfig : fileNamePropertyConfigs) {
+            String name = fileNameConfig.getString(".");
+            String hash = fileNameConfig.getString("@hashProperty", "");
+            String folder = fileNameConfig.getString("@folder", "master");
+            fileNameProperties.add(new FileNameProperty(name, hash, folder));
         }
 
-        maxTryTimes = myconfig.getInt("maxTryTimes", 3);
+        //        List<Object> properties = config.getList("fileNameProperty");
+        //        for (Object property : properties) {
+        //            fileNameProperties.add(String.valueOf(property));
+        //        }
+
+        maxTryTimes = config.getInt("maxTryTimes", 3);
 
         process = step.getProzess();
         log.debug("process id = " + process.getId());
@@ -134,7 +144,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             e.printStackTrace();
         }
 
-        List<HierarchicalConfiguration> responsesConfigs = myconfig.configurationsAt("response");
+        List<HierarchicalConfiguration> responsesConfigs = config.configurationsAt("response");
         for (HierarchicalConfiguration responseConfig : responsesConfigs) {
             String responseType = responseConfig.getString("@type");
             String responseMethod = responseConfig.getString("@method");
@@ -229,26 +239,59 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private List<String> prepareFileUrlsList() {
         List<String> urlsList = new ArrayList<>();
-        Map<String, String> propertiesMap = preparePropertiesMap();
-        for (String fileNameProperty : fileNameProperties) {
-            if (propertiesMap.containsKey(fileNameProperty)) {
-                log.debug("found property = " + fileNameProperty);
-                String propertyValue = propertiesMap.get(fileNameProperty);
-                log.debug("propertyValue = " + propertyValue);
-                addUrlsToList(propertyValue, urlsList);
+        //        Map<String, String> propertiesMap = preparePropertiesMap();
+        //        for (String fileNameProperty : fileNameProperties) {
+        //            if (propertiesMap.containsKey(fileNameProperty)) {
+        //                log.debug("found property = " + fileNameProperty);
+        //                String propertyValue = propertiesMap.get(fileNameProperty);
+        //                log.debug("propertyValue = " + propertyValue);
+        //                addUrlsToList(propertyValue, urlsList);
+        //            }
+        //        }
+
+        Map<String, List<String>> propertiesMap = preparePropertiesMap();
+
+        for (FileNameProperty fileNameProperty : fileNameProperties) {
+            String propertyName = fileNameProperty.getName();
+            if (propertiesMap.containsKey(propertyName)) {
+                log.debug("found property = " + propertyName);
+                String hashProperty = fileNameProperty.getHash();
+                log.debug("the according hash property is: " + hashProperty);
+                List<String> propertyValues = propertiesMap.get(propertyName);
+                log.debug("propertyValue has " + propertyValues.size() + " elements");
+                addUrlsToList(propertyValues, urlsList);
             }
         }
 
         return urlsList;
     }
 
-    private Map<String, String> preparePropertiesMap() {
+    //    private Map<String, String> preparePropertiesMap() {
+    //        List<Processproperty> properties = process.getEigenschaftenList();
+    //        Map<String, String> propertiesMap = new HashMap<>();
+    //        for (Processproperty property : properties) {
+    //            String key = property.getTitel();
+    //            String value = property.getWert();
+    //            propertiesMap.put(key, value);
+    //        }
+    //
+    //        return propertiesMap;
+    //    }
+
+    private Map<String, List<String>> preparePropertiesMap() {
         List<Processproperty> properties = process.getEigenschaftenList();
-        Map<String, String> propertiesMap = new HashMap<>();
+        Map<String, List<String>> propertiesMap = new HashMap<>();
         for (Processproperty property : properties) {
             String key = property.getTitel();
             String value = property.getWert();
-            propertiesMap.put(key, value);
+
+            propertiesMap.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+
+            //            if (propertiesMap.containsKey(key)) {
+            //                propertiesMap.get(key).add(value);
+            //            } else {
+            //                propertiesMap.put(key, Arrays.asList(value));
+            //            }
         }
 
         return propertiesMap;
@@ -264,6 +307,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         String[] urls = propertyValue.split(",");
         for (String url : urls) {
             urlsList.add(url);
+        }
+    }
+
+    private void addUrlsToList(List<String> propertyValues, List<String> urlsList) {
+        for (String propertyValue : propertyValues) {
+            addUrlsToList(propertyValue, urlsList);
         }
     }
 
@@ -433,6 +482,25 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         private String method;
         private String url;
         private String json;
+    }
+
+    @Data
+    private class FileNameProperty {
+        private String name;
+        private String hash;
+        private String folder;
+
+        public FileNameProperty(String name, String hash, String folder) {
+            this.name = name;
+            this.hash = hash;
+            this.folder = folder;
+        }
+
+        public FileNameProperty(String name, String hash) {
+            this.name = name;
+            this.hash = hash;
+            this.folder = "master";
+        }
     }
 
 
