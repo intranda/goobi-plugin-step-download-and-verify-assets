@@ -89,21 +89,23 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     @Getter
     private Step step;
 
-    private String returnPath;
-
-    private List<FileNameProperty> fileNameProperties = new ArrayList<>();
-
-    private List<SingleResponse> successResponses = new ArrayList<>();
-    private List<SingleResponse> errorResponses = new ArrayList<>();
-
-    private List<String> errorsList = new ArrayList<>();
-
-    private int maxTryTimes;
-
     private Process process;
     private VariableReplacer replacer;
 
+    private String returnPath;
+    private List<String> errorsList = new ArrayList<>();
+
+    // <fileNameProperty>
+    private List<FileNameProperty> fileNameProperties = new ArrayList<>();
+    // <response type="success">
+    private List<SingleResponse> successResponses = new ArrayList<>();
+    // <response type="error">
+    private List<SingleResponse> errorResponses = new ArrayList<>();
+    // how many times shall be maximally tried before reporting final results
+    private int maxTryTimes;
+    // @urlProperty -> @hashProperty
     private Map<String, Long> urlHashMap = new HashMap<>();
+    // @urlProperty -> @folder
     private Map<String, String> urlFolderMap = new HashMap<>();
 
     // create a custom response handler
@@ -136,8 +138,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
-        log.info("DownloadAndVerifyAssets step plugin initialized");
 
+        maxTryTimes = config.getInt("maxTryTimes", 1);
+
+        // <fileNameProperty>
         List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
         for (HierarchicalConfiguration fileNameConfig : fileNamePropertyConfigs) {
             String name = fileNameConfig.getString("@urlProperty", "");
@@ -156,8 +160,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             }
         }
 
-        maxTryTimes = config.getInt("maxTryTimes", 1);
-
+        // <response>
         List<HierarchicalConfiguration> responsesConfigs = config.configurationsAt("response");
         for (HierarchicalConfiguration responseConfig : responsesConfigs) {
             String responseType = responseConfig.getString("@type");
@@ -184,6 +187,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 errorResponses.add(response);
             }
         }
+
+        log.info("DownloadAndVerifyAssets step plugin initialized");
     }
 
     @Override
@@ -233,7 +238,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     @Override
     public PluginReturnValue run() {
         // your logic goes here
-        prepareUrlHashMap();
+        prepareUrlHashAndFolderMaps();
 
         for (int i = 0; i < maxTryTimes; ++i) {
             urlHashMap = processAllFiles(urlHashMap, urlFolderMap);
@@ -255,7 +260,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
     }
 
-    private void prepareUrlHashMap() {
+    /**
+     * prepare the private fields urlHashMap & urlFolderMap
+     */
+    private void prepareUrlHashAndFolderMaps() {
         Map<String, List<String>> propertiesMap = preparePropertiesMap();
 
         for (FileNameProperty fileNameProperty : fileNameProperties) {
@@ -274,12 +282,21 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 log.debug("urls has " + urls.size() + " elements");
 
                 String folder = fileNameProperty.getFolder();
-                addUrlHashPairs(urls, hashValues, folder);
+                addUrlsToBothMaps(urls, hashValues, folder);
             }
         }
     }
 
-    private boolean addUrlHashPairs(List<String> urls, List<Long> hashes, String folder) {
+    /**
+     * pair the input list of URLs with the input list of hashes as well as the input string folder, save the pairs accordingly into the private
+     * fields urlHashMap & urlFolderMap
+     * 
+     * @param urls list of URLs that shall be paired with hashes and the input string folder
+     * @param hashes list of hashes that shall be paired with the input list of URLs
+     * @param folder target folder that shall be paired with every URL in the input list of URLs
+     * @return true if everything is successfully paired and saved into both maps, false otherwise. RETURNED VALUE NOT IN USE YET.
+     */
+    private boolean addUrlsToBothMaps(List<String> urls, List<Long> hashes, String folder) {
         if (urls == null || hashes == null) {
             log.debug("urls or hashes is null");
             return false;
@@ -302,6 +319,11 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return true;
     }
 
+    /**
+     * prepare a list between the name of @urlProperty and the list of values of all process properties bearing that name
+     * 
+     * @return a map between the name of @urlProperty and the list of values of all process properties bearing that name
+     */
     private Map<String, List<String>> preparePropertiesMap() {
         List<Processproperty> properties = process.getEigenschaftenList();
         Map<String, List<String>> propertiesMap = new HashMap<>();
@@ -315,6 +337,13 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return propertiesMap;
     }
 
+    /**
+     * download and verify all files
+     * 
+     * @param urlHashMap
+     * @param urlFolderMap
+     * @return a map containing infos of unsuccessful files
+     */
     private Map<String, Long> processAllFiles(Map<String, Long> urlHashMap, Map<String, String> urlFolderMap) {
         Map<String, Long> unsuccessfulMap = new HashMap<>();
         // download and verify files
@@ -334,6 +363,14 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return unsuccessfulMap;
     }
 
+    /**
+     * download and verify the file
+     * 
+     * @param fileUrl url of the file from where it shall be downloaded
+     * @param hash expected checksum of the file
+     * @param targetFolder folder to save the downloaded file
+     * @throws IOException
+     */
     private void processFile(String fileUrl, long hash, String targetFolder) throws IOException {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
@@ -402,6 +439,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return crc32;
     }
 
+    /**
+     * log message into both log file and journal
+     * 
+     * @param logType
+     * @param message
+     */
     private void logMessage(LogType logType, String message) {
         switch (logType) {
             case ERROR:
@@ -417,12 +460,23 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         Helper.addMessageToProcessJournal(process.getId(), logType, message);
     }
 
+    /**
+     * log error
+     * 
+     * @param message
+     */
     private void logError(String message) {
         log.error(message);
         Helper.addMessageToProcessJournal(process.getId(), LogType.ERROR, message);
         errorsList.add(message);
     }
 
+    /**
+     * report results according to the final status
+     * 
+     * @param success final status
+     * @return true if results are successfully reported, false otherwise
+     */
     private boolean reportResults(boolean success) {
         boolean reportSuccess = true;
 
@@ -440,7 +494,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 String jsonBase = response.getJson();
                 String json = generateJsonMessage(jsonBase);
                 log.debug("json = " + json);
-                reportSuccess = responseViaRest(method, url, json) && reportSuccess;
+                reportSuccess = sendResponseViaRest(method, url, json) && reportSuccess;
             }
         }
 
@@ -450,6 +504,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return reportSuccess;
     }
 
+    /**
+     * generate the JSON message based on the input string
+     * 
+     * @param jsonBase
+     * @return JSON string
+     */
     private String generateJsonMessage(String jsonBase) {
         JSONObject jsonObject = StringUtils.isBlank(jsonBase) ? new JSONObject() : new JSONObject(jsonBase);
         log.debug("jsonObject = " + jsonObject.toString());
@@ -459,7 +519,15 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return jsonObject.toString();
     }
 
-    private boolean responseViaRest(String method, String url, String json) {
+    /**
+     * send response via REST API
+     * 
+     * @param method REST method, options are put | post | patch
+     * @param url URL of the remote system that expects this response
+     * @param json JSON string as request body
+     * @return true if the response is successfully sent, false otherwise
+     */
+    private boolean sendResponseViaRest(String method, String url, String json) {
         try {
             HttpEntityEnclosingRequestBase httpBase;
             switch (method.toLowerCase()) {
