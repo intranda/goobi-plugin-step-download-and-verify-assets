@@ -152,7 +152,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 fileNameProperties.add(new FileNameProperty(name, hash, folderPath));
 
             } catch (IOException | SwapException | DAOException e) {
-                // TODO Auto-generated catch block
+                String message = "Failed to get the configured image folder: " + folder;
+                logError(message);
                 e.printStackTrace();
             }
         }
@@ -259,7 +260,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         // report success / errors via REST to the BACH system
-        reportResults(successful);
+        successful = reportResults(successful) && successful;
 
         log.info("DownloadAndVerifyAssets step plugin executed");
         return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
@@ -276,6 +277,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 log.debug("the name of the according hash property is: " + hashPropertyName);
                 List<Long> hashValues = propertiesMap.get(hashPropertyName)
                         .stream()
+                        .map(String::trim)
                         .map(Long::valueOf)
                         .collect(Collectors.toList());
 
@@ -432,9 +434,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         errorsList.add(message);
     }
 
-    private void reportResults(boolean success) {
+    private boolean reportResults(boolean success) {
         String logMessage = success ? "success" : "errors";
         log.debug(logMessage);
+        boolean reportSuccess = true;
 
         List<SingleResponse> responses = success ? successResponses : errorResponses;
         for (SingleResponse response : responses) {
@@ -450,14 +453,16 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 String jsonBase = response.getJson();
                 String json = generateJsonMessage(jsonBase);
                 log.debug("json = " + json);
-                responseViaRest(method, url, json);
+                reportSuccess = reportSuccess && responseViaRest(method, url, json);
             }
 
         }
+
+        return reportSuccess;
     }
 
     private String generateJsonMessage(String jsonBase) {
-        JSONObject jsonObject = jsonBase == null ? new JSONObject() : new JSONObject(jsonBase);
+        JSONObject jsonObject = StringUtils.isBlank(jsonBase) ? new JSONObject() : new JSONObject(jsonBase);
         log.debug("jsonObject = " + jsonObject.toString());
 
         jsonObject.put("errors", errorsList);
@@ -465,34 +470,41 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         return jsonObject.toString();
     }
 
-    private void responseViaRest(String method, String url, String json) {
-        HttpEntityEnclosingRequestBase httpBase;
-        switch (method.toLowerCase()) {
-            case "put":
-                httpBase = new HttpPut(url);
-                break;
-            case "post":
-                httpBase = new HttpPost(url);
-                break;
-            case "patch":
-                httpBase = new HttpPatch(url);
-            default: // unknown
-                return;
-        }
+    private boolean responseViaRest(String method, String url, String json) {
+        try {
+            HttpEntityEnclosingRequestBase httpBase;
+            switch (method.toLowerCase()) {
+                case "put":
+                    httpBase = new HttpPut(url);
+                    break;
+                case "post":
+                    httpBase = new HttpPost(url);
+                    break;
+                case "patch": // not tested
+                    httpBase = new HttpPatch(url);
+                default: // unknown
+                    String message = "Unknown method: " + method;
+                    logError(message);
+                    return false;
+            }
 
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
-            httpBase.setHeader("Accept", "application/json");
-            httpBase.setHeader("Content-type", "application/json");
-            httpBase.setEntity(new StringEntity(json));
+            try (CloseableHttpClient client = HttpClients.createDefault()) {
+                httpBase.setHeader("Accept", "application/json");
+                httpBase.setHeader("Content-type", "application/json");
+                httpBase.setEntity(new StringEntity(json));
 
-            log.info("Executing request " + httpBase.getRequestLine());
+                log.info("Executing request " + httpBase.getRequestLine());
 
-            String responseBody = client.execute(httpBase, RESPONSE_HANDLER);
-            log.debug(responseBody);
+                String responseBody = client.execute(httpBase, RESPONSE_HANDLER);
+                log.debug(responseBody);
+                return true;
+            }
 
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
+        } catch (Exception e) {
+            String message = "Failed to send response via REST: " + e;
+            logError(message);
             e.printStackTrace();
+            return false;
         }
     }
 
