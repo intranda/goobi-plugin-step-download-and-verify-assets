@@ -103,8 +103,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private Process process;
     private VariableReplacer replacer;
 
-    private String masterFolder;
-
     private Map<String, Long> urlHashMap = new HashMap<>();
     private Map<String, String> urlFolderMap = new HashMap<>();
 
@@ -159,15 +157,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         maxTryTimes = config.getInt("maxTryTimes", 1);
-
-        try {
-            masterFolder = process.getImagesOrigDirectory(false);
-            log.debug("masterFolder = " + masterFolder);
-
-        } catch (IOException | SwapException | DAOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
 
         List<HierarchicalConfiguration> responsesConfigs = config.configurationsAt("response");
         for (HierarchicalConfiguration responseConfig : responsesConfigs) {
@@ -435,8 +424,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     }
 
     private boolean reportResults(boolean success) {
-        String logMessage = success ? "success" : "errors";
-        log.debug(logMessage);
         boolean reportSuccess = true;
 
         List<SingleResponse> responses = success ? successResponses : errorResponses;
@@ -453,10 +440,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 String jsonBase = response.getJson();
                 String json = generateJsonMessage(jsonBase);
                 log.debug("json = " + json);
-                reportSuccess = reportSuccess && responseViaRest(method, url, json);
+                reportSuccess = responseViaRest(method, url, json) && reportSuccess;
             }
-
         }
+
+        String logMessage = success && reportSuccess ? "success" : "errors";
+        log.debug(logMessage);
 
         return reportSuccess;
     }
