@@ -22,13 +22,13 @@ package de.intranda.goobi.plugins;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.io.OutputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -39,14 +39,15 @@ import java.util.zip.CheckedInputStream;
 
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
@@ -62,7 +63,6 @@ import org.json.JSONObject;
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.StorageProvider;
-import de.sub.goobi.helper.StorageProviderInterface;
 import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
@@ -81,8 +81,6 @@ import ugh.exceptions.ReadException;
 @Log4j2
 public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private static final long serialVersionUID = 1L;
-
-    private static final StorageProviderInterface storageProvider = StorageProvider.getInstance();
 
     @Getter
     private String title = "intranda_step_download_and_verify_assets";
@@ -108,6 +106,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     // @urlProperty -> @folder
     private Map<String, String> urlFolderMap = new HashMap<>();
 
+    private String authenticationToken;
+
     @Override
     public void initialize(Step step, String returnPath) {
         this.returnPath = returnPath;
@@ -129,7 +129,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
 
         maxTryTimes = config.getInt("maxTryTimes", 1);
-
+        authenticationToken = config.getString("authentication");
         // <fileNameProperty>
         List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
         for (HierarchicalConfiguration fileNameConfig : fileNamePropertyConfigs) {
@@ -360,69 +360,50 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private void processFile(String fileUrl, long hash, String targetFolder) throws IOException {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
-        URL url = null;
-        try {
-            url = new URL(fileUrl);
 
-        } catch (MalformedURLException e) {
-            String message = "the input URL is malformed: " + fileUrl;
-            logError(message);
-            return;
+        String fileName = Paths.get(fileUrl).getFileName().toString();
+        Path destination = Paths.get(targetFolder, fileName);
+
+        StorageProvider.getInstance().createDirectories(destination.getParent());
+
+        try (OutputStream out = StorageProvider.getInstance().newOutputStream(destination)) {
+            CloseableHttpClient httpclient = null;
+            HttpGet method = null;
+            try {
+
+                method = new HttpGet(fileUrl);
+                httpclient = HttpClientBuilder.create().build();
+                if (StringUtils.isNotBlank(authenticationToken)) {
+                    method.setHeader("Authorization", authenticationToken);
+                }
+
+                InputStream input = httpclient.execute(method, HttpUtils.streamResponseHandler);
+                // url is correctly formed, download the file
+                CRC32 crc = new CRC32();
+                try (InputStream in = new CheckedInputStream(input, crc);
+                        ReadableByteChannel readableByteChannel = Channels.newChannel(in);
+                        FileOutputStream outputStream = new FileOutputStream(destination.toString())) {
+
+                    FileChannel fileChannel = outputStream.getChannel();
+                    fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
+                }
+
+                long crc32 = crc.getValue();
+
+                // check checksum
+                if (hash != crc32) {
+                    String message = "checksums do not match, the file might be corrupted: " + destination;
+                    // delete the downloaded file
+                    Files.delete(destination);
+                    throw new IOException(message);
+                }
+            } catch (Exception e) {
+                log.error("Unable to connect to url " + fileUrl, e);
+
+            }
+
         }
 
-        String fileName = getFileNameFromUrl(url);
-        Path targetFolderPath = Path.of(targetFolder);
-        storageProvider.createDirectories(targetFolderPath);
-        Path targetPath = targetFolderPath.resolve(fileName);
-
-        // url is correctly formed, download the file
-        long checksumDownloaded = downloadFile(url, targetPath);
-
-        // check checksum
-        if (hash != checksumDownloaded) {
-            String message = "checksums do not match, the file might be corrupted: " + targetPath;
-            // delete the downloaded file
-            Files.delete(targetPath);
-            throw new IOException(message);
-        }
-    }
-
-    /**
-     * get the file name from a URL object
-     * 
-     * @param url the URL object
-     * @return the full file name including the file extension
-     */
-    private String getFileNameFromUrl(URL url) {
-        String urlFileName = url.getFile();
-        log.debug("urlFileName = " + urlFileName);
-
-        String fileName = FilenameUtils.getName(urlFileName);
-        log.debug("fileName = " + fileName);
-
-        return fileName;
-    }
-
-    /**
-     * download the file from the given url
-     * 
-     * @param url URL of the file
-     * @param targetPath targeted full path of the file
-     * @throws IOException
-     */
-    private long downloadFile(URL url, Path targetPath) throws IOException {
-        CRC32 crc = new CRC32();
-        try (InputStream in = new CheckedInputStream(url.openStream(), crc);
-                ReadableByteChannel readableByteChannel = Channels.newChannel(in);
-                FileOutputStream outputStream = new FileOutputStream(targetPath.toString())) {
-
-            FileChannel fileChannel = outputStream.getChannel();
-            fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
-        }
-
-        long crc32 = crc.getValue();
-        log.debug("crc32 = " + crc32);
-        return crc32;
     }
 
     /**
@@ -533,6 +514,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                     String message = "Unknown method: " + method;
                     logError(message);
                     return false;
+            }
+            // authentication
+            if (StringUtils.isNotBlank(authenticationToken)) {
+                httpBase.setHeader("Authorization", authenticationToken);
             }
 
             try (CloseableHttpClient client = HttpClients.createDefault()) {
