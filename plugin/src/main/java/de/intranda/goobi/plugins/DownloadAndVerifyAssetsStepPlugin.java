@@ -27,6 +27,7 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,9 +41,6 @@ import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpEntity;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
@@ -50,7 +48,6 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
@@ -69,6 +66,7 @@ import de.sub.goobi.helper.StorageProviderInterface;
 import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
+import io.goobi.workflow.api.connection.HttpUtils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -82,42 +80,33 @@ import ugh.exceptions.ReadException;
 @PluginImplementation
 @Log4j2
 public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
+    private static final long serialVersionUID = 1L;
+
     private static final StorageProviderInterface storageProvider = StorageProvider.getInstance();
-    
+
     @Getter
     private String title = "intranda_step_download_and_verify_assets";
     @Getter
     private Step step;
 
     private Process process;
-    private VariableReplacer replacer;
+    private transient VariableReplacer replacer;
 
     private String returnPath;
     private List<String> errorsList = new ArrayList<>();
 
     // <fileNameProperty>
-    private List<FileNameProperty> fileNameProperties = new ArrayList<>();
+    private transient List<FileNameProperty> fileNameProperties = new ArrayList<>();
     // <response type="success">
-    private List<SingleResponse> successResponses = new ArrayList<>();
+    private transient List<SingleResponse> successResponses = new ArrayList<>();
     // <response type="error">
-    private List<SingleResponse> errorResponses = new ArrayList<>();
+    private transient List<SingleResponse> errorResponses = new ArrayList<>();
     // how many times shall be maximally tried before reporting final results
     private int maxTryTimes;
     // @urlProperty -> @hashProperty
     private Map<String, Long> urlHashMap = new HashMap<>();
     // @urlProperty -> @folder
     private Map<String, String> urlFolderMap = new HashMap<>();
-
-    // create a custom response handler
-    private static final ResponseHandler<String> RESPONSE_HANDLER = response -> {
-        int status = response.getStatusLine().getStatusCode();
-        if (status >= 200 && status < 300) {
-            HttpEntity entity = response.getEntity();
-            return entity != null ? EntityUtils.toString(entity) : null;
-        } else {
-            throw new ClientProtocolException("Unexpected response status: " + status);
-        }
-    };
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -135,7 +124,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         } catch (ReadException | IOException | SwapException | PreferencesException e) {
             logError("Exception happened during initialization: " + e.getMessage());
         }
-                
+
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
 
@@ -147,7 +136,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             String name = fileNameConfig.getString("@urlProperty", "");
             String hash = fileNameConfig.getString("@hashProperty", "");
             String folder = fileNameConfig.getString("@folder", "master");
-            
+
             try {
                 String folderPath = process.getConfiguredImageFolder(folder);
                 log.debug("folderPath with name '" + folder + "' is: " + folderPath);
@@ -193,10 +182,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public PluginGuiType getPluginGuiType() {
-        return PluginGuiType.FULL;
-        // return PluginGuiType.PART;
-        // return PluginGuiType.PART_AND_FULL;
-        // return PluginGuiType.NONE;
+        return PluginGuiType.NONE;
     }
 
     @Override
@@ -218,7 +204,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     public String finish() {
         return "/uii" + returnPath;
     }
-    
+
     @Override
     public int getInterfaceVersion() {
         return 0;
@@ -226,9 +212,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public HashMap<String, StepReturnValue> validate() {
-        return null;
+        return null; //NOSONAR
     }
-    
+
     @Override
     public boolean execute() {
         PluginReturnValue ret = run();
@@ -396,7 +382,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         if (hash != checksumDownloaded) {
             String message = "checksums do not match, the file might be corrupted: " + targetPath;
             // delete the downloaded file
-            targetPath.toFile().delete();
+            Files.delete(targetPath);
             throw new IOException(message);
         }
     }
@@ -449,10 +435,13 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         switch (logType) {
             case ERROR:
                 log.error(message);
+                return;
             case DEBUG:
                 log.debug(message);
+                return;
             case WARN:
                 log.warn(message);
+                return;
             default: // INFO
                 log.info(message);
         }
@@ -539,6 +528,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                     break;
                 case "patch": // not tested
                     httpBase = new HttpPatch(url);
+                    break;
                 default: // unknown
                     String message = "Unknown method: " + method;
                     logError(message);
@@ -552,7 +542,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
                 log.info("Executing request " + httpBase.getRequestLine());
 
-                String responseBody = client.execute(httpBase, RESPONSE_HANDLER);
+                String responseBody = client.execute(httpBase, HttpUtils.stringResponseHandler);
                 log.debug(responseBody);
                 return true;
             }
