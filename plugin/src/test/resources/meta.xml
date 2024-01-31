@@ -11,59 +11,32 @@
          <mets:xmlData>
             <mods:mods>
                <mods:extension>
-                  <goobi:goobi>
-                     <goobi:metadata name="PublicationYear">2010</goobi:metadata>
-                     <goobi:metadata name="physicalDescriptionExtent">200 S.</goobi:metadata>
-                     <goobi:metadata name="OtherTitle">Other title</goobi:metadata>
-                     <goobi:metadata name="TitleDocMainShort">Sorting title volume</goobi:metadata>
-                     <goobi:metadata name="TitleDocSub1">Sub title volume</goobi:metadata>
-                     <goobi:metadata name="singleDigCollection">Collection</goobi:metadata>
-                     <goobi:metadata name="CatalogIDDigital">98765432</goobi:metadata>
-                     <goobi:metadata anchorId="true" name="CatalogIDDigital">12345678</goobi:metadata>
-                     <goobi:metadata name="TitleDocMain">Main title volume</goobi:metadata>
-                     <goobi:metadata name="CurrentNo">20</goobi:metadata>
-                     <goobi:metadata name="_directionRTL">false</goobi:metadata>
-                     <goobi:metadata name="PhysicalLocation">Location</goobi:metadata>                     
-                  </goobi:goobi>
-               </mods:extension>
-            </mods:mods>
-         </mets:xmlData>
-      </mets:mdWrap>
-   </mets:dmdSec>
-   <mets:dmdSec ID="DMDLOG_0002">
-      <mets:mdWrap MDTYPE="MODS">
-         <mets:xmlData>
-            <mods:mods>
-               <mods:extension>
-                  <goobi:goobi>
-                     <goobi:metadata name="TitleDocMain">Title</goobi:metadata>
-                  </goobi:goobi>
-               </mods:extension>
-            </mods:mods>
-         </mets:xmlData>
-      </mets:mdWrap>
-   </mets:dmdSec>
-   <mets:dmdSec ID="DMDLOG_0003">
-      <mets:mdWrap MDTYPE="MODS">
-         <mets:xmlData>
-            <mods:mods>
-               <mods:extension>
-                  <goobi:goobi>
-                     <goobi:metadata name="TitleDocMain">Title 2</goobi:metadata>
-                  </goobi:goobi>
-               </mods:extension>
-            </mods:mods>
-         </mets:xmlData>
-      </mets:mdWrap>
-   </mets:dmdSec>
-   <mets:dmdSec ID="DMDLOG_0004">
-      <mets:mdWrap MDTYPE="MODS">
-         <mets:xmlData>
-            <mods:mods>
-               <mods:extension>
-                  <goobi:goobi>
-                     <goobi:metadata name="TitleDocMain">Title 3</goobi:metadata>
-                  </goobi:goobi>
+                 <goobi:goobi>
+                     <goobi:metadata name="CatalogIDDigital">1234567890</goobi:metadata>
+                     <goobi:metadata name="TitleDocMain">Haupttitel</goobi:metadata>
+                     <goobi:metadata name="TitleDocParallel">Main title</goobi:metadata>
+                     <goobi:metadata name="DocLanguage">German</goobi:metadata>
+                     <goobi:metadata name="PublicationYear">2023</goobi:metadata>
+                     <goobi:metadata name="PlaceOfPublication">Wien</goobi:metadata>
+                     <goobi:metadata name="physicalDescriptionExtent">98 Seiten</goobi:metadata>
+                     <goobi:metadata name="ThesisType">Bachelorarbeit</goobi:metadata>
+                     <goobi:metadata name="SubmissionDate">2023-12-14T10:28:11</goobi:metadata>
+                     <goobi:metadata name="ExamDate">2023-12-14T10:28:11</goobi:metadata>
+                     <goobi:metadata name="CourseOfStudy">Bachelorstudium Wirtschafts- und Sozialwissenschaften</goobi:metadata>
+                     <goobi:metadata name="AbstractDeu">Hier steht eine deutsche Zusammenfassung</goobi:metadata>
+                     <goobi:metadata name="AuthorSubjectTopicEng">test 1</goobi:metadata>
+                     <goobi:metadata name="AuthorSubjectTopicEng">test2</goobi:metadata>
+                     <goobi:metadata name="AuthorSubjectTopicEng">test keyword 3</goobi:metadata>
+                     <goobi:metadata name="ThesisId">106</goobi:metadata>
+                     <goobi:metadata name="Student" type="group">
+                        <goobi:metadata name="Name">fullname</goobi:metadata>
+                        <goobi:metadata name="StudentId">matricle</goobi:metadata>
+                     </goobi:metadata>
+                     <goobi:metadata name="DegreeGrantingInstitution" type="corporate">
+                        <goobi:mainName>Wirtschaftsuniversität Wien</goobi:mainName>
+                        <goobi:subName/>
+                     </goobi:metadata>
+                    </goobi:goobi>
                </mods:extension>
             </mods:mods>
          </mets:xmlData>
@@ -117,14 +90,8 @@
       </mets:fileGrp>
    </mets:fileSec>
    <mets:structMap TYPE="LOGICAL">
-      <mets:div ID="LOG_0002" TYPE="MultiVolumeWork">
-         <mets:mptr LOCTYPE="URL" xlink:href=""/>
-         <mets:div DMDID="DMDLOG_0001" ID="LOG_0003" TYPE="Volume">
-            <mets:div DMDID="DMDLOG_0002" ID="LOG_0004" TYPE="Figure"/>
-            <mets:div DMDID="DMDLOG_0003" ID="LOG_0005" TYPE="Figure"/>
-            <mets:div DMDID="DMDLOG_0004" ID="LOG_0006" TYPE="Figure"/>
+         <mets:div DMDID="DMDLOG_0001" ID="LOG_0003" TYPE="Thesis">
          </mets:div>
-      </mets:div>
    </mets:structMap>
    <mets:structMap TYPE="PHYSICAL">
       <mets:div DMDID="DMDPHYS_0000" ID="PHYS_0000" TYPE="BoundBook">
@@ -171,8 +138,5 @@
       <mets:smLink xlink:to="PHYS_0008" xlink:from="LOG_0003"/>
       <mets:smLink xlink:to="PHYS_0009" xlink:from="LOG_0003"/>
       <mets:smLink xlink:to="PHYS_0010" xlink:from="LOG_0003"/>
-      <mets:smLink xlink:to="PHYS_0005" xlink:from="LOG_0004"/>
-      <mets:smLink xlink:to="PHYS_0008" xlink:from="LOG_0005"/>
-      <mets:smLink xlink:to="PHYS_0010" xlink:from="LOG_0006"/>
    </mets:structLink>
 </mets:mets>

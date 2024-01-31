@@ -10,17 +10,19 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.regex.MatchResult;
 
 import org.easymock.EasyMock;
 import org.goobi.beans.Process;
+import org.goobi.beans.Processproperty;
 import org.goobi.beans.Project;
 import org.goobi.beans.Ruleset;
 import org.goobi.beans.Step;
 import org.goobi.beans.User;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -31,18 +33,21 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import de.sub.goobi.config.ConfigurationHelper;
+import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.VariableReplacer;
 import de.sub.goobi.helper.enums.StepStatus;
 import de.sub.goobi.metadaten.MetadatenHelper;
 import de.sub.goobi.persistence.managers.MetadataManager;
 import de.sub.goobi.persistence.managers.ProcessManager;
+import de.sub.goobi.persistence.managers.PropertyManager;
+import io.goobi.workflow.api.connection.HttpUtils;
 import ugh.dl.Fileformat;
 import ugh.dl.Prefs;
 import ugh.fileformats.mets.MetsMods;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ MetadatenHelper.class, VariableReplacer.class, ConfigurationHelper.class, ProcessManager.class,
-        MetadataManager.class })
+@PrepareForTest({ MetadatenHelper.class, VariableReplacer.class, ConfigurationHelper.class, ProcessManager.class, MetadataManager.class, Helper.class,
+        HttpUtils.class, PropertyManager.class })
 @PowerMockIgnore({ "javax.management.*", "javax.xml.*", "org.xml.*", "org.w3c.*", "javax.net.ssl.*", "jdk.internal.reflect.*" })
 public class DownloadAndVerifyAssetsPluginTest {
 
@@ -76,7 +81,6 @@ public class DownloadAndVerifyAssetsPluginTest {
         assertNotNull(plugin);
     }
 
-    @Ignore
     @Test
     public void testInit() {
         DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
@@ -100,10 +104,6 @@ public class DownloadAndVerifyAssetsPluginTest {
         Path metaTarget = Paths.get(processDirectory.getAbsolutePath(), "meta.xml");
         Files.copy(metaSource, metaTarget);
 
-        Path anchorSource = Paths.get(resourcesFolder, "meta_anchor.xml");
-        Path anchorTarget = Paths.get(processDirectory.getAbsolutePath(), "meta_anchor.xml");
-        Files.copy(anchorSource, anchorTarget);
-
         PowerMock.mockStatic(ConfigurationHelper.class);
         ConfigurationHelper configurationHelper = EasyMock.createMock(ConfigurationHelper.class);
         EasyMock.expect(ConfigurationHelper.getInstance()).andReturn(configurationHelper).anyTimes();
@@ -111,17 +111,42 @@ public class DownloadAndVerifyAssetsPluginTest {
         EasyMock.expect(configurationHelper.isAllowWhitespacesInFolder()).andReturn(false).anyTimes();
         EasyMock.expect(configurationHelper.useS3()).andReturn(false).anyTimes();
         EasyMock.expect(configurationHelper.isUseProxy()).andReturn(false).anyTimes();
+        EasyMock.expect(configurationHelper.isUseMasterDirectory()).andReturn(false).anyTimes();
+        EasyMock.expect(configurationHelper.isCreateMasterDirectory()).andReturn(false).anyTimes();
+
         EasyMock.expect(configurationHelper.getGoobiContentServerTimeOut()).andReturn(60000).anyTimes();
         EasyMock.expect(configurationHelper.getMetadataFolder()).andReturn(metadataDirectoryName).anyTimes();
         EasyMock.expect(configurationHelper.getRulesetFolder()).andReturn(resourcesFolder).anyTimes();
         EasyMock.expect(configurationHelper.getProcessImagesMainDirectoryName()).andReturn("00469418X_media").anyTimes();
-        EasyMock.expect(configurationHelper.isUseMasterDirectory()).andReturn(true).anyTimes();
+
         EasyMock.expect(configurationHelper.getConfigurationFolder()).andReturn(resourcesFolder).anyTimes();
+        EasyMock.expect(configurationHelper.getGoobiFolder()).andReturn(resourcesFolder).anyTimes();
+        EasyMock.expect(configurationHelper.getScriptsFolder()).andReturn(resourcesFolder).anyTimes();
+
         EasyMock.expect(configurationHelper.getNumberOfMetaBackups()).andReturn(0).anyTimes();
         EasyMock.replay(configurationHelper);
 
+        //        PowerMock.mockStatic(HttpUtils.class);
+        //        EasyMock.expect(HttpUtils.getStringFromUrl(EasyMock.anyString())).andReturn(getJsonResponse());
+        //        PowerMock.replay(HttpUtils.class);
+
+        PowerMock.mockStatic(Helper.class);
+        Helper.addMessageToProcessJournal(EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.anyString());
+        Helper.addMessageToProcessJournal(EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.anyString());
+        Helper.addMessageToProcessJournal(EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.anyString());
+
         PowerMock.mockStatic(VariableReplacer.class);
         EasyMock.expect(VariableReplacer.simpleReplace(EasyMock.anyString(), EasyMock.anyObject())).andReturn("00469418X_media").anyTimes();
+
+        Iterable<MatchResult> results = EasyMock.createMock(Iterable.class);
+        Iterator<MatchResult> iter = EasyMock.createMock(Iterator.class);
+        EasyMock.expect(results.iterator()).andReturn(iter).anyTimes();
+        EasyMock.expect(iter.hasNext()).andReturn(false).anyTimes();
+
+        EasyMock.expect(VariableReplacer.findRegexMatches(EasyMock.anyString(), EasyMock.anyString())).andReturn(results).anyTimes();
+        EasyMock.replay(results);
+        EasyMock.replay(iter);
+
         PowerMock.replay(VariableReplacer.class);
         prefs = new Prefs();
         prefs.loadPrefs(resourcesFolder + "ruleset.xml");
@@ -138,9 +163,23 @@ public class DownloadAndVerifyAssetsPluginTest {
 
         PowerMock.mockStatic(MetadataManager.class);
         MetadataManager.updateMetadata(1, Collections.emptyMap());
+
+        MetadataManager.updateMetadata(1, Collections.emptyMap());
+
         MetadataManager.updateJSONMetadata(1, Collections.emptyMap());
+
+        PowerMock.mockStatic(PropertyManager.class);
+        EasyMock.expect(PropertyManager.getProcessPropertiesForProcess(EasyMock.anyInt())).andReturn(Collections.emptyList()).anyTimes();
+        PropertyManager.saveProcessProperty(EasyMock.anyObject());
+        PropertyManager.saveProcessProperty(EasyMock.anyObject());
+        PropertyManager.saveProcessProperty(EasyMock.anyObject());
+        PropertyManager.saveProcessProperty(EasyMock.anyObject());
+        PropertyManager.saveProcessProperty(EasyMock.anyObject());
+
+        PowerMock.replay(PropertyManager.class);
         PowerMock.replay(MetadataManager.class);
         PowerMock.replay(ConfigurationHelper.class);
+        PowerMock.replay(Helper.class);
 
         process = getProcess();
 
@@ -151,7 +190,78 @@ public class DownloadAndVerifyAssetsPluginTest {
         process.setRegelsatz(ruleset);
         EasyMock.expect(ruleset.getPreferences()).andReturn(prefs).anyTimes();
         PowerMock.replay(ruleset);
+        createProcessProperties();
+    }
 
+    private void createProcessProperties() {
+        List<Processproperty> props = new ArrayList<>();
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentIDSplitted");
+            property.setWert("107");
+            props.add(property);
+        }
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentIDSplitted");
+            property.setWert("108");
+            props.add(property);
+        }
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentIDSplitted");
+            property.setWert("109");
+            props.add(property);
+        }
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentIDSplitted");
+            property.setWert("110");
+            props.add(property);
+        }
+
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentHashSplitted");
+            property.setWert("Hash1");
+            props.add(property);
+        }
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentHashSplitted");
+            property.setWert("Hash2");
+            props.add(property);
+        }
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentHashSplitted");
+            property.setWert("Hash3");
+            props.add(property);
+        }
+        {
+            Processproperty property = new Processproperty();
+            property.setId(1);
+            property.setProzess(process);
+            property.setTitel("AttachmentHashSplitted");
+            property.setWert("Hash4");
+            props.add(property);
+        }
+
+        process.setEigenschaften(props);
     }
 
     public Process getProcess() {

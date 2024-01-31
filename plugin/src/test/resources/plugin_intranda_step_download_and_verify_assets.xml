@@ -14,7 +14,7 @@
         <!-- Configure here how many times shall be maximally tried before reporting final results. OPTIONAL. DEFAULT 1. -->
         <maxTryTimes>3</maxTryTimes>
         
-        <downloadurl></downloadurl>
+        <downloadurl>https://example.com/{meta.ThesisId}/file/{urlProperty}</downloadurl>
         <!-- This tag accepts the following three attributes:
               - @urlProperty: name of the property that holds the URL of the file
               - @hashProperty: name of the property that holds the checksum of the file
