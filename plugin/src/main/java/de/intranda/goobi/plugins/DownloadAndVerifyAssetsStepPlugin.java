@@ -19,22 +19,21 @@
 
 package de.intranda.goobi.plugins;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
+import java.io.OutputStream;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.zip.CRC32;
-import java.util.zip.CheckedInputStream;
 
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
@@ -102,7 +101,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     // how many times shall be maximally tried before reporting final results
     private int maxTryTimes;
     // @urlProperty -> @hashProperty
-    private Map<String, Long> urlHashMap = new HashMap<>();
+    private Map<String, String> urlHashMap = new HashMap<>();
     // @urlProperty -> @folder
     private Map<String, String> urlFolderMap = new HashMap<>();
 
@@ -264,10 +263,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             if (propertiesMap.containsKey(propertyName) && propertiesMap.containsKey(hashPropertyName)) {
                 log.debug("found property = " + propertyName);
                 log.debug("the name of the according hash property is: " + hashPropertyName);
-                List<Long> hashValues = propertiesMap.get(hashPropertyName)
+                List<String> hashValues = propertiesMap.get(hashPropertyName)
                         .stream()
                         .map(String::trim)
-                        .map(Long::valueOf)
                         .collect(Collectors.toList());
 
                 List<String> urls = propertiesMap.get(propertyName);
@@ -288,7 +286,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @param folder target folder that shall be paired with every URL in the input list of URLs
      * @return true if everything is successfully paired and saved into both maps, false otherwise. RETURNED VALUE NOT IN USE YET.
      */
-    private boolean addUrlsToBothMaps(List<String> urls, List<Long> hashes, String folder) {
+    private boolean addUrlsToBothMaps(List<String> urls, List<String> hashes, String folder) {
         if (urls == null || hashes == null) {
             log.debug("urls or hashes is null");
             return false;
@@ -301,7 +299,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         for (int i = 0; i < urls.size(); ++i) {
             String url = downloadUrl.replace("{FILEID}", urls.get(i));
-            long hash = hashes.get(i);
+            String hash = hashes.get(i);
             urlHashMap.put(url, hash);
             urlFolderMap.put(url, folder);
             log.debug("URL-Hash pair added: " + url + " -> " + hash);
@@ -336,12 +334,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @param urlFolderMap
      * @return a map containing infos of unsuccessful files
      */
-    private Map<String, Long> processAllFiles(Map<String, Long> urlHashMap, Map<String, String> urlFolderMap) {
-        Map<String, Long> unsuccessfulMap = new HashMap<>();
+    private Map<String, String> processAllFiles(Map<String, String> urlHashMap, Map<String, String> urlFolderMap) {
+        Map<String, String> unsuccessfulMap = new HashMap<>();
         // download and verify files
-        for (Map.Entry<String, Long> urlHashPair : urlHashMap.entrySet()) {
+        for (Map.Entry<String, String> urlHashPair : urlHashMap.entrySet()) {
             String url = urlHashPair.getKey();
-            long hash = urlHashPair.getValue();
+            String hash = urlHashPair.getValue();
             String targetFolder = urlFolderMap.get(url);
 
             try {
@@ -363,7 +361,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @param targetFolder folder to save the downloaded file
      * @throws IOException
      */
-    private void processFile(String fileUrl, long hash, String targetFolder) throws IOException {
+    private void processFile(String fileUrl, String hash, String targetFolder) throws IOException {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
 
@@ -389,25 +387,20 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             }
 
             Path destination = Paths.get(targetFolder, fileName + extension);
-
             StorageProvider.getInstance().createDirectories(destination.getParent());
 
-            InputStream inputStream = entity.getContent();
-
-            // url is correctly formed, download the file
-            CRC32 crc = new CRC32();
-            try (InputStream in = new CheckedInputStream(inputStream, crc);
-                    ReadableByteChannel readableByteChannel = Channels.newChannel(in);
-                    FileOutputStream outputStream = new FileOutputStream(destination.toString())) {
-
-                FileChannel fileChannel = outputStream.getChannel();
-                fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
+            try (OutputStream out = StorageProvider.getInstance().newOutputStream(destination)) {
+                entity.writeTo(out);
             }
 
-            long crc32 = crc.getValue();
+            // url is correctly formed, download the file
+            String actualHash = "";
+            try (InputStream inputStream = StorageProvider.getInstance().newInputStream(destination)) {
+                actualHash = calculateHash(inputStream);
+            }
 
             // check checksum
-            if (hash != crc32) {
+            if (hash.equals(actualHash)) {
                 String message = "checksums do not match, the file might be corrupted: " + destination;
                 // delete the downloaded file
                 Files.delete(destination);
@@ -570,6 +563,38 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         private String name;
         private String hash;
         private String folder;
+    }
+
+    private static String calculateHash(InputStream is) throws IOException {
+        MessageDigest shamd = null;
+        try {
+            shamd = MessageDigest.getInstance("SHA-256");
+
+            try (DigestInputStream dis = new DigestInputStream(is, shamd)) {
+                int n = 0;
+                byte[] buffer = new byte[8092];
+                while (n != -1) {
+                    n = dis.read(buffer);
+                }
+                is.close();
+            }
+            String shaString;
+            shaString = getShaString(shamd);
+
+            return shaString;
+        } catch (NoSuchAlgorithmException e1) {
+            return null;
+        }
+    }
+
+    private static String getShaString(MessageDigest messageDigest) {
+        BigInteger bigInt = new BigInteger(1, messageDigest.digest());
+        StringBuilder sha256 = new StringBuilder(bigInt.toString(16).toLowerCase());
+        while (sha256.length() < 64) {
+            sha256.insert(0, "0");
+        }
+
+        return sha256.toString();
     }
 
 }

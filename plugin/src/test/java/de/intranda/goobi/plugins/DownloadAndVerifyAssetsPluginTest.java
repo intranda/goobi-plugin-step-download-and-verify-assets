@@ -220,7 +220,7 @@ public class DownloadAndVerifyAssetsPluginTest {
             property.setId(1);
             property.setProzess(process);
             property.setTitel("AttachmentHashSplitted");
-            property.setWert("2411355717");
+            property.setWert("1eae07b41cb3323ab370d3ddd78de440ffe6d581d1d3736c086b8949d24b35da");
             props.add(property);
         }
 
