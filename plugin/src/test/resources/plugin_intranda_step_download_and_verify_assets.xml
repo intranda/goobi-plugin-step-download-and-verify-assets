@@ -14,13 +14,15 @@
         <!-- Configure here how many times shall be maximally tried before reporting final results. OPTIONAL. DEFAULT 1. -->
         <maxTryTimes>3</maxTryTimes>
         
-        <downloadurl>https://example.com/{meta.ThesisId}/file/{urlProperty}</downloadurl>
+        <authentication>Bearer 123456</authentication>
+        
+        <downloadUrl>https://example.com/thesis/{meta.ThesisId}/file/{FILEID}</downloadUrl>
         <!-- This tag accepts the following three attributes:
               - @urlProperty: name of the property that holds the URL of the file
               - @hashProperty: name of the property that holds the checksum of the file
               - @folder: configured name of the target folder that shall be used to download the file. OPTIONAL. DEFAULT master.
          -->
-        <fileNameProperty urlProperty="AttachmentHashSplitted" hashProperty="AttachmentHashSplitted" folder="master" />
+        <fileNameProperty urlProperty="AttachmentIDSplitted" hashProperty="AttachmentHashSplitted" folder="master" />
       
         
         <!-- A response tag accepts four attributes:

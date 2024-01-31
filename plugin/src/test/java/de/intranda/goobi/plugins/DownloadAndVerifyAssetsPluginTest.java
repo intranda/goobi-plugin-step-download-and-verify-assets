@@ -15,12 +15,14 @@ import java.util.List;
 import java.util.regex.MatchResult;
 
 import org.easymock.EasyMock;
+import org.easymock.IAnswer;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Project;
 import org.goobi.beans.Ruleset;
 import org.goobi.beans.Step;
 import org.goobi.beans.User;
+import org.goobi.production.enums.PluginReturnValue;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -90,8 +92,9 @@ public class DownloadAndVerifyAssetsPluginTest {
 
     @Test
     public void testVersion() throws IOException {
-        String s = "xyz";
-        assertNotNull(s);
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
+        plugin.initialize(step, "something");
+        assertEquals(PluginReturnValue.FINISH, plugin.run());
     }
 
     @Before
@@ -126,17 +129,22 @@ public class DownloadAndVerifyAssetsPluginTest {
         EasyMock.expect(configurationHelper.getNumberOfMetaBackups()).andReturn(0).anyTimes();
         EasyMock.replay(configurationHelper);
 
-        //        PowerMock.mockStatic(HttpUtils.class);
-        //        EasyMock.expect(HttpUtils.getStringFromUrl(EasyMock.anyString())).andReturn(getJsonResponse());
-        //        PowerMock.replay(HttpUtils.class);
-
         PowerMock.mockStatic(Helper.class);
         Helper.addMessageToProcessJournal(EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.anyString());
         Helper.addMessageToProcessJournal(EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.anyString());
         Helper.addMessageToProcessJournal(EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.anyString());
 
         PowerMock.mockStatic(VariableReplacer.class);
-        EasyMock.expect(VariableReplacer.simpleReplace(EasyMock.anyString(), EasyMock.anyObject())).andReturn("00469418X_media").anyTimes();
+        EasyMock.expect(VariableReplacer.simpleReplace(EasyMock.anyString(), EasyMock.anyObject()))
+                .andAnswer(
+                        new IAnswer<String>() {
+                            @Override
+                            public String answer() throws Throwable {
+                                String val = (String) EasyMock.getCurrentArguments()[0];
+                                return val.replace("{meta.ThesisId}", "106");
+                            }
+                        })
+                .anyTimes();
 
         Iterable<MatchResult> results = EasyMock.createMock(Iterable.class);
         Iterator<MatchResult> iter = EasyMock.createMock(Iterator.class);
@@ -203,61 +211,13 @@ public class DownloadAndVerifyAssetsPluginTest {
             property.setWert("107");
             props.add(property);
         }
-        {
-            Processproperty property = new Processproperty();
-            property.setId(1);
-            property.setProzess(process);
-            property.setTitel("AttachmentIDSplitted");
-            property.setWert("108");
-            props.add(property);
-        }
-        {
-            Processproperty property = new Processproperty();
-            property.setId(1);
-            property.setProzess(process);
-            property.setTitel("AttachmentIDSplitted");
-            property.setWert("109");
-            props.add(property);
-        }
-        {
-            Processproperty property = new Processproperty();
-            property.setId(1);
-            property.setProzess(process);
-            property.setTitel("AttachmentIDSplitted");
-            property.setWert("110");
-            props.add(property);
-        }
 
         {
             Processproperty property = new Processproperty();
             property.setId(1);
             property.setProzess(process);
             property.setTitel("AttachmentHashSplitted");
-            property.setWert("Hash1");
-            props.add(property);
-        }
-        {
-            Processproperty property = new Processproperty();
-            property.setId(1);
-            property.setProzess(process);
-            property.setTitel("AttachmentHashSplitted");
-            property.setWert("Hash2");
-            props.add(property);
-        }
-        {
-            Processproperty property = new Processproperty();
-            property.setId(1);
-            property.setProzess(process);
-            property.setTitel("AttachmentHashSplitted");
-            property.setWert("Hash3");
-            props.add(property);
-        }
-        {
-            Processproperty property = new Processproperty();
-            property.setId(1);
-            property.setProzess(process);
-            property.setTitel("AttachmentHashSplitted");
-            property.setWert("Hash4");
+            property.setWert("2411355717");
             props.add(property);
         }
 

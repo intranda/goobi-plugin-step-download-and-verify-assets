@@ -22,7 +22,6 @@ package de.intranda.goobi.plugins;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
@@ -40,8 +39,9 @@ import java.util.zip.CheckedInputStream;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
@@ -108,6 +108,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private String authenticationToken;
 
+    private String downloadUrl;
+
     @Override
     public void initialize(Step step, String returnPath) {
         this.returnPath = returnPath;
@@ -129,6 +131,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
 
         maxTryTimes = config.getInt("maxTryTimes", 1);
+        // get download url from config
+        downloadUrl = config.getString("downloadUrl");
+        // replace variables in download url
+        downloadUrl = replacer.replace(downloadUrl);
         authenticationToken = config.getString("authentication");
         // <fileNameProperty>
         List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
@@ -294,7 +300,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         for (int i = 0; i < urls.size(); ++i) {
-            String url = urls.get(i);
+            String url = downloadUrl.replace("{FILEID}", urls.get(i));
             long hash = hashes.get(i);
             urlHashMap.put(url, hash);
             urlFolderMap.put(url, folder);
@@ -362,45 +368,53 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         log.debug("downloading file from url: " + fileUrl);
 
         String fileName = Paths.get(fileUrl).getFileName().toString();
-        Path destination = Paths.get(targetFolder, fileName);
 
-        StorageProvider.getInstance().createDirectories(destination.getParent());
+        CloseableHttpClient httpclient = null;
+        HttpPost method = null;
 
-        try (OutputStream out = StorageProvider.getInstance().newOutputStream(destination)) {
-            CloseableHttpClient httpclient = null;
-            HttpGet method = null;
-            try {
+        try {
 
-                method = new HttpGet(fileUrl);
-                httpclient = HttpClientBuilder.create().build();
-                if (StringUtils.isNotBlank(authenticationToken)) {
-                    method.setHeader("Authorization", authenticationToken);
-                }
-
-                InputStream input = httpclient.execute(method, HttpUtils.streamResponseHandler);
-                // url is correctly formed, download the file
-                CRC32 crc = new CRC32();
-                try (InputStream in = new CheckedInputStream(input, crc);
-                        ReadableByteChannel readableByteChannel = Channels.newChannel(in);
-                        FileOutputStream outputStream = new FileOutputStream(destination.toString())) {
-
-                    FileChannel fileChannel = outputStream.getChannel();
-                    fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
-                }
-
-                long crc32 = crc.getValue();
-
-                // check checksum
-                if (hash != crc32) {
-                    String message = "checksums do not match, the file might be corrupted: " + destination;
-                    // delete the downloaded file
-                    Files.delete(destination);
-                    throw new IOException(message);
-                }
-            } catch (Exception e) {
-                log.error("Unable to connect to url " + fileUrl, e);
-
+            method = new HttpPost(fileUrl);
+            httpclient = HttpClientBuilder.create().build();
+            if (StringUtils.isNotBlank(authenticationToken)) {
+                method.setHeader("Authorization", authenticationToken);
             }
+
+            HttpResponse response = httpclient.execute(method);
+            HttpEntity entity = response.getEntity();
+            String contentType = entity.getContentType().getValue();
+            String extension = "";
+            if (StringUtils.isNotBlank(contentType)) {
+                extension = "." + contentType.substring(contentType.indexOf("/") + 1);
+            }
+
+            Path destination = Paths.get(targetFolder, fileName + extension);
+
+            StorageProvider.getInstance().createDirectories(destination.getParent());
+
+            InputStream inputStream = entity.getContent();
+
+            // url is correctly formed, download the file
+            CRC32 crc = new CRC32();
+            try (InputStream in = new CheckedInputStream(inputStream, crc);
+                    ReadableByteChannel readableByteChannel = Channels.newChannel(in);
+                    FileOutputStream outputStream = new FileOutputStream(destination.toString())) {
+
+                FileChannel fileChannel = outputStream.getChannel();
+                fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
+            }
+
+            long crc32 = crc.getValue();
+
+            // check checksum
+            if (hash != crc32) {
+                String message = "checksums do not match, the file might be corrupted: " + destination;
+                // delete the downloaded file
+                Files.delete(destination);
+                throw new IOException(message);
+            }
+        } catch (Exception e) {
+            log.error("Unable to connect to url " + fileUrl, e);
 
         }
 
