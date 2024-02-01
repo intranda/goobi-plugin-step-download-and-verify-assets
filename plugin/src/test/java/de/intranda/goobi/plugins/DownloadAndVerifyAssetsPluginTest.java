@@ -25,6 +25,7 @@ import org.goobi.beans.User;
 import org.goobi.production.enums.PluginReturnValue;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -91,7 +92,7 @@ public class DownloadAndVerifyAssetsPluginTest {
     }
 
     // does not work without access to BACH server, enable it locally
-    //    @Ignore
+    @Ignore
     @Test
     public void testDownload() throws IOException {
         DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
