@@ -400,7 +400,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             }
 
             // check checksum
-            if (hash.equals(actualHash)) {
+            if (!hash.equals(actualHash)) {
                 String message = "checksums do not match, the file might be corrupted: " + destination;
                 // delete the downloaded file
                 Files.delete(destination);
