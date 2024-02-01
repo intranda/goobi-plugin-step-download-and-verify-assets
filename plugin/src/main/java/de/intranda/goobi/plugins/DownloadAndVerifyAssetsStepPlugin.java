@@ -369,7 +369,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         CloseableHttpClient httpclient = null;
         HttpPost method = null;
-
+        String actualHash = "";
+        Path destination = null;
         try {
 
             method = new HttpPost(fileUrl);
@@ -386,7 +387,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 extension = "." + contentType.substring(contentType.indexOf("/") + 1);
             }
 
-            Path destination = Paths.get(targetFolder, fileName + extension);
+            destination = Paths.get(targetFolder, fileName + extension);
             StorageProvider.getInstance().createDirectories(destination.getParent());
 
             try (OutputStream out = StorageProvider.getInstance().newOutputStream(destination)) {
@@ -394,21 +395,20 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             }
 
             // url is correctly formed, download the file
-            String actualHash = "";
+
             try (InputStream inputStream = StorageProvider.getInstance().newInputStream(destination)) {
                 actualHash = calculateHash(inputStream);
             }
 
-            // check checksum
-            if (!hash.equals(actualHash)) {
-                String message = "checksums do not match, the file might be corrupted: " + destination;
-                // delete the downloaded file
-                Files.delete(destination);
-                throw new IOException(message);
-            }
         } catch (Exception e) {
             log.error("Unable to connect to url " + fileUrl, e);
-
+        }
+        // check checksum
+        if (!hash.equals(actualHash)) {
+            String message = "checksums do not match, the file might be corrupted: " + destination;
+            // delete the downloaded file
+            Files.delete(destination);
+            throw new IOException(message);
         }
 
     }

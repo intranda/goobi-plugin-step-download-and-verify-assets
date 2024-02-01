@@ -25,7 +25,6 @@ import org.goobi.beans.User;
 import org.goobi.production.enums.PluginReturnValue;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -92,7 +91,7 @@ public class DownloadAndVerifyAssetsPluginTest {
     }
 
     // does not work without access to BACH server, enable it locally
-    @Ignore
+    //    @Ignore
     @Test
     public void testDownload() throws IOException {
         DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
@@ -220,7 +219,7 @@ public class DownloadAndVerifyAssetsPluginTest {
             property.setId(1);
             property.setProzess(process);
             property.setTitel("AttachmentHashSplitted");
-            property.setWert("1eae07b41cb3323ab370d3ddd78de440ffe6d581d1d3736c086b8949d24b35da");
+            property.setWert("1eae07b41cb3323ab370d3ddd78de440ffe6d581d1d3736c086b8949d24b35da1");
             props.add(property);
         }
 
