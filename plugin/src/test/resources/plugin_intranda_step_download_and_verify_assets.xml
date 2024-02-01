@@ -14,9 +14,9 @@
         <!-- Configure here how many times shall be maximally tried before reporting final results. OPTIONAL. DEFAULT 1. -->
         <maxTryTimes>3</maxTryTimes>
         
-        <authentication>Bearer library_api_testkey_123</authentication>
+        <authentication>Bearer 123456</authentication>
         
-        <downloadUrl>https://bach.wu.ac.at:12345/thesis-dev/tmg-api/library/thesis/{meta.ThesisId}/file/{FILEID}</downloadUrl>
+        <downloadUrl>https://example.com/thesis/{meta.ThesisId}/file/{FILEID}</downloadUrl>
         <!-- This tag accepts the following three attributes:
               - @urlProperty: name of the property that holds the URL of the file
               - @hashProperty: name of the property that holds the checksum of the file
