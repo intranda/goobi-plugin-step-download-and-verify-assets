@@ -2,9 +2,9 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.goobi.workflow.plugin</groupId>
-    <artifactId>plugin-step-download_and_verify_assets</artifactId>
+    <artifactId>plugin-step-download-and-verify-assets</artifactId>
     <version>24.03-SNAPSHOT</version>
   </parent>
-  <artifactId>plugin-step-download_and_verify_assets-base</artifactId>
+  <artifactId>plugin-step-download-and-verify-assets-base</artifactId>
   <packaging>jar</packaging>
 </project>
