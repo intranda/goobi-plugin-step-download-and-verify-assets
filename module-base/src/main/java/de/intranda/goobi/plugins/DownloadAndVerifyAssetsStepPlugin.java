@@ -270,9 +270,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
                 List<String> urls = propertiesMap.get(propertyName);
                 log.debug("urls has " + urls.size() + " elements");
-
-                String folder = fileNameProperty.getFolder();
-                addUrlsToBothMaps(urls, hashValues, folder);
+                if (!urls.isEmpty()) {
+                    String folder = fileNameProperty.getFolder();
+                    addUrlsToBothMaps(urls, hashValues, folder);
+                }
             }
         }
     }
@@ -320,8 +321,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         for (Processproperty property : properties) {
             String key = property.getTitel();
             String value = property.getWert();
-
-            propertiesMap.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+            if (StringUtils.isNotBlank(value)) {
+                propertiesMap.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+            }
         }
 
         return propertiesMap;
