@@ -21,6 +21,7 @@ The configuration file is usually located here:
 /opt/digiverso/goobi/config/plugin_intranda_step_download_and_verify_assets.xml
 ```
 
+![Selection of the plugin for performing the step](screen1_en.png)
 
 ## Configuration
 The content of this configuration file looks like the following example:
