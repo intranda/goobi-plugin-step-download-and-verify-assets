@@ -2,7 +2,7 @@
 title: Download und Verifizieren von Dateien
 identifier: intranda_step_download_and_verify_assets
 published: true
-description: Dieses Step-Plugin ermöglicht es, mehrere Dateien von URLs herunterzuladen und mit Checksummen zu verifizieren, die als Vorgangseigenschaften festgelegt wurden. Rückmeldungen über den Verlauf können zu verschiedenen Systemen oder auch lokal innerhalb des Journals gespeichert werden.
+description: Dieses Step-Plugin ermöglicht es, Dateien herunterzuladen und mit Checksummen zu verifizieren, die als Vorgangseigenschaften bestehen. Das Validierungsergebnis wird innerhalb des Journals gespeichert.
 ---
 ## Einführung
 Dieses Plugin liest URLs bzw. Hash-Werte aus mehreren konfigurierten Vorgangseigenschaften ein, lädt die Dateien von der definierten URL herunter und verglicht sie anschließend mit dem zugehörigen Hash-Wert. Abschließend können mehrere Rückmeldungen gegeben werden, je nachdem ob der Status `success` oder `error` lautet. Diese Rückmeldungen können per REST zu einem anderen System geschickt oder einfach innerhalb des Journals geloggt werden.
