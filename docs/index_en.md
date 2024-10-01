@@ -2,7 +2,7 @@
 title: Downloading and verifying files
 identifier: intranda_step_download_and_verify_assets
 published: true
-description: This step plugin makes it possible to download multiple files from URLs and verify them with checksums that have been defined as process properties. Feedback on the progress can be saved to different systems or locally within the journal.
+description: This step plugin makes it possible to download files and verify them with checksums that exist as process properties. The validation result is saved within the journal.
 ---
 ## Introduction
 This plugin reads URLs or hash values from several configured process properties, downloads the files from the defined URL and then compares them with the corresponding hash value. Finally, several responses can be given, depending on whether the status is `success` or `error`. These responses can be sent to another system via REST or simply logged within the journal.
