@@ -1,14 +1,14 @@
 <project default="devbuild">
 
 	<!-- Simply set the name of the plugin here, e.g. "fileUpload" or "file_upload") instead of "sample" -->
-	<property name="name" value="download_and_verify_assets" />
+	<property name="name" value="download-and-verify-assets" />
 
 	<!-- Use this task to let ant copy the compiled jar files to the target folders for development  -->
 	<target name="devbuild">
 		<exec executable="mvn">
 			<arg value="package"/>
 		</exec>
-		<copy file="module-main/target/plugin_intranda_step_${name}.jar" todir="/opt/digiverso/goobi/plugins/step/" overwrite="true"/>
+		<copy file="module-base/target/plugin-step-${name}-base.jar" todir="/opt/digiverso/goobi/plugins/step/" overwrite="true"/>
 	</target>
 
 </project>
