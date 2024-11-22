@@ -33,11 +33,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
@@ -108,6 +110,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private String authenticationToken;
 
     private String downloadUrl;
+
+    private static Pattern filenamePattern = Pattern.compile(".*filename=\\\"(.*)\\\".*");
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -266,7 +270,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 List<String> hashValues = propertiesMap.get(hashPropertyName)
                         .stream()
                         .map(String::trim)
-                        .collect(Collectors.toList());
+                        .toList();
 
                 List<String> urls = propertiesMap.get(propertyName);
                 log.debug("urls has " + urls.size() + " elements");
@@ -381,12 +385,25 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 method.setHeader("Authorization", authenticationToken);
             }
 
+            String extension = "";
             HttpResponse response = httpclient.execute(method);
             HttpEntity entity = response.getEntity();
+            for (Header h : response.getHeaders("content-disposition")) {
+                String val = h.getValue();
+                Matcher m = filenamePattern.matcher(val);
+                if (m.find()) {
+                    extension = m.group(1);
+                    if (extension.contains(".")) {
+                        extension = extension.substring(extension.indexOf("."));
+                    }
+                }
+            }
             String contentType = entity.getContentType().getValue();
-            String extension = "";
-            if (StringUtils.isNotBlank(contentType)) {
+            if (StringUtils.isBlank(extension) && StringUtils.isNotBlank(contentType)) {
                 extension = "." + contentType.substring(contentType.indexOf("/") + 1);
+                if (extension.contains(";")) {
+                    extension = extension.substring(0, extension.indexOf(";"));
+                }
             }
 
             destination = Paths.get(targetFolder, fileName + extension);
