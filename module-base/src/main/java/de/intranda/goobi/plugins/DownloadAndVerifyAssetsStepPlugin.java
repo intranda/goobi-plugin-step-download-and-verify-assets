@@ -547,8 +547,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             }
 
             try (CloseableHttpClient client = HttpClients.createDefault()) {
+                httpBase.setHeader("Accept", "application/json");
                 if (StringUtils.isNotBlank(json)) {
-                    httpBase.setHeader("Accept", "application/json");
                     httpBase.setHeader("Content-type", "application/json");
                     httpBase.setEntity(new StringEntity(json));
                 }
