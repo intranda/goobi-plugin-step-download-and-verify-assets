@@ -107,6 +107,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     // @urlProperty -> @folder
     private Map<String, String> urlFolderMap = new HashMap<>();
 
+    // url -> FILEID
+    private Map<String, String> urlIdMap = new HashMap<>();
+
     private String authenticationToken;
 
     private String downloadUrl;
@@ -236,7 +239,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         prepareUrlHashAndFolderMaps();
 
         for (int i = 0; i < maxTryTimes; ++i) {
-            urlHashMap = processAllFiles(urlHashMap, urlFolderMap);
+            urlHashMap = processAllFiles();
         }
 
         boolean successful = urlHashMap.isEmpty();
@@ -247,9 +250,6 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 logError(message);
             }
         }
-
-        // report success / errors via REST to the BACH system
-        successful = reportResults(successful) && successful;
 
         log.info("DownloadAndVerifyAssets step plugin executed");
         return successful ? PluginReturnValue.FINISH : PluginReturnValue.ERROR;
@@ -303,10 +303,12 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         for (int i = 0; i < urls.size(); ++i) {
-            String url = downloadUrl.replace("{FILEID}", urls.get(i));
+            String fileId = urls.get(i);
+            String url = downloadUrl.replace("{FILEID}", fileId);
             String hash = hashes.get(i);
             urlHashMap.put(url, hash);
             urlFolderMap.put(url, folder);
+            urlIdMap.put(url, fileId);
             log.debug("URL-Hash pair added: " + url + " -> " + hash);
             log.debug("URL-folder pair added: " + url + " -> " + folder);
         }
@@ -340,16 +342,16 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @param urlFolderMap
      * @return a map containing infos of unsuccessful files
      */
-    private Map<String, String> processAllFiles(Map<String, String> urlHashMap, Map<String, String> urlFolderMap) {
+    private Map<String, String> processAllFiles() {
         Map<String, String> unsuccessfulMap = new HashMap<>();
         // download and verify files
         for (Map.Entry<String, String> urlHashPair : urlHashMap.entrySet()) {
             String url = urlHashPair.getKey();
             String hash = urlHashPair.getValue();
             String targetFolder = urlFolderMap.get(url);
-
+            String fileId = urlIdMap.get(url);
             try {
-                processFile(url, hash, targetFolder);
+                processFile(url, hash, targetFolder, fileId);
 
             } catch (Exception e) {
                 unsuccessfulMap.put(url, hash);
@@ -367,10 +369,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @param targetFolder folder to save the downloaded file
      * @throws IOException
      */
-    private void processFile(String fileUrl, String hash, String targetFolder) throws IOException {
+    private void processFile(String fileUrl, String hash, String targetFolder, String fileId) throws IOException {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
-
+        boolean successful = false;
         String fileName = Paths.get(fileUrl).getFileName().toString();
 
         CloseableHttpClient httpclient = null;
@@ -418,7 +420,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             try (InputStream inputStream = StorageProvider.getInstance().newInputStream(destination)) {
                 actualHash = calculateHash(inputStream);
             }
-
+            successful = true;
         } catch (Exception e) {
             log.error("Unable to connect to url " + fileUrl, e);
         }
@@ -427,7 +429,14 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             String message = "checksums do not match, the file might be corrupted: " + destination;
             // delete the downloaded file
             Files.delete(destination);
+            successful = false;
             throw new IOException(message);
+        }
+
+        //if file exist and is valid: send success message
+        if (StorageProvider.getInstance().isFileExists(destination)) {
+            reportResults(successful, fileId);
+
         }
 
     }
@@ -473,7 +482,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @param success final status
      * @return true if results are successfully reported, false otherwise
      */
-    private boolean reportResults(boolean success) {
+    private boolean reportResults(boolean success, String fileId) {
         boolean reportSuccess = true;
 
         List<SingleResponse> responses = success ? successResponses : errorResponses;
@@ -490,7 +499,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 String jsonBase = response.getJson();
                 String json = generateJsonMessage(jsonBase);
                 log.debug("json = " + json);
-                reportSuccess = sendResponseViaRest(method, url, json) && reportSuccess;
+                reportSuccess = sendResponseViaRest(method, url.replace("{FILEID}", fileId), json) && reportSuccess;
             }
         }
 
