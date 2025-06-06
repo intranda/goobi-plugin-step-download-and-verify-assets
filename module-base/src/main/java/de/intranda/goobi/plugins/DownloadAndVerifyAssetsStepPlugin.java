@@ -50,6 +50,7 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
+import org.goobi.beans.GoobiProperty;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
@@ -322,9 +323,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @return a map between the name of @urlProperty and the list of values of all process properties bearing that name
      */
     private Map<String, List<String>> preparePropertiesMap() {
-        List<Processproperty> properties = process.getEigenschaftenList();
+        List<GoobiProperty> properties = process.getEigenschaftenList();
         Map<String, List<String>> propertiesMap = new HashMap<>();
-        for (Processproperty property : properties) {
+        for (GoobiProperty property : properties) {
             String key = property.getTitel();
             String value = property.getWert();
             if (StringUtils.isNotBlank(value)) {
