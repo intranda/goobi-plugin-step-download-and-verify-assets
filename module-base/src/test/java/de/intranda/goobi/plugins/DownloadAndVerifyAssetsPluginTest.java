@@ -16,6 +16,7 @@ import java.util.regex.MatchResult;
 
 import org.easymock.EasyMock;
 import org.easymock.IAnswer;
+import org.goobi.beans.GoobiProperty;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Project;
@@ -205,7 +206,7 @@ public class DownloadAndVerifyAssetsPluginTest {
     }
 
     private void createProcessProperties() {
-        List<Processproperty> props = new ArrayList<>();
+        List<GoobiProperty> props = new ArrayList<>();
         {
             Processproperty property = new Processproperty();
             property.setId(1);
