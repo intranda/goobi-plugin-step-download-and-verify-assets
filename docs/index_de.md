@@ -3,6 +3,10 @@ title: Download und Verifizieren von Dateien
 identifier: intranda_step_download_and_verify_assets
 published: true
 description: Dieses Step-Plugin ermöglicht es, Dateien herunterzuladen und mit Checksummen zu verifizieren, die als Vorgangseigenschaften bestehen. Das Validierungsergebnis wird innerhalb des Journals gespeichert.
+keywords:
+    - Goobi workflow
+    - Plugin
+    - Step Plugin
 ---
 ## Einführung
 Dieses Plugin liest URLs bzw. Hash-Werte aus mehreren konfigurierten Vorgangseigenschaften ein, lädt die Dateien von der definierten URL herunter und verglicht sie anschließend mit dem zugehörigen Hash-Wert. Abschließend können mehrere Rückmeldungen gegeben werden, je nachdem ob der Status `success` oder `error` lautet. Diese Rückmeldungen können per REST zu einem anderen System geschickt oder einfach innerhalb des Journals geloggt werden.
