@@ -9,7 +9,7 @@ keywords:
     - Step Plugin
 ---
 ## Einführung
-Dieses Plugin liest URLs bzw. Hash-Werte aus mehreren konfigurierten Vorgangseigenschaften ein, lädt die Dateien von der definierten URL herunter und verglicht sie anschließend mit dem zugehörigen Hash-Wert. Abschließend können mehrere Rückmeldungen gegeben werden, je nachdem ob der Status `success` oder `error` lautet. Diese Rückmeldungen können per REST zu einem anderen System geschickt oder einfach innerhalb des Journals geloggt werden.
+Dieses Plugin liest URLs bzw. Hash-Werte aus mehreren konfigurierten Vorgangseigenschaften ein, lädt die Dateien von der definierten URL herunter und vergleicht sie anschließend mit dem zugehörigen Hash-Wert. Abschließend können mehrere Rückmeldungen gegeben werden, je nachdem ob der Status `success` oder `error` lautet. Diese Rückmeldungen können per REST zu einem anderen System geschickt oder einfach innerhalb des Journals geloggt werden.
 
 
 ## Installation
@@ -25,7 +25,7 @@ Die Konfigurationsdatei befindet sich üblicherweise hier:
 /opt/digiverso/goobi/config/plugin_intranda_step_download_and_verify_assets.xml
 ```
 
-![Auswahl des Plugsins zur Durchführung des Arbeitschrittes](screen1_de.png)
+![Auswahl des Plugins zur Durchführung des Arbeitsschrittes](screen1_de.png)
 
 ## Konfiguration
 Der Inhalt dieser Konfigurationsdatei sieht beispielhaft wie folgt aus:
