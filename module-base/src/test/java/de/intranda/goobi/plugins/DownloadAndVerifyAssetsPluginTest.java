@@ -168,7 +168,7 @@ public class DownloadAndVerifyAssetsPluginTest {
         PowerMock.mockStatic(MetadatenHelper.class);
         EasyMock.expect(MetadatenHelper.getMetaFileType(EasyMock.anyString())).andReturn("mets").anyTimes();
         EasyMock.expect(MetadatenHelper.getFileformatByName(EasyMock.anyString(), EasyMock.anyObject())).andReturn(ff).anyTimes();
-        EasyMock.expect(MetadatenHelper.getMetadataOfFileformat(EasyMock.anyObject(), EasyMock.anyBoolean()))
+        EasyMock.expect(MetadatenHelper.getMetadataOfFileformat(EasyMock.anyObject()))
                 .andReturn(Collections.emptyMap())
                 .anyTimes();
         PowerMock.replay(MetadatenHelper.class);
@@ -178,7 +178,6 @@ public class DownloadAndVerifyAssetsPluginTest {
 
         MetadataManager.updateMetadata(1, Collections.emptyMap());
 
-        MetadataManager.updateJSONMetadata(1, Collections.emptyMap());
 
         PowerMock.mockStatic(PropertyManager.class);
         EasyMock.expect(PropertyManager.getProcessPropertiesForProcess(EasyMock.anyInt())).andReturn(Collections.emptyList()).anyTimes();
