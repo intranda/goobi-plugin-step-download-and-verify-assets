@@ -23,6 +23,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -52,7 +57,6 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.goobi.beans.GoobiProperty;
 import org.goobi.beans.Process;
-import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginGuiType;
@@ -371,6 +375,22 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
      * @throws IOException
      */
     private void processFile(String fileUrl, String hash, String targetFolder, String fileId) throws IOException {
+        // SSRF protection
+        URL parsedUrl;
+        try {
+            try {
+                parsedUrl = new URI(fileUrl).toURL();
+            } catch (URISyntaxException e) {
+                log.error(e);
+                throw new IOException(e);
+            }
+        } catch (MalformedURLException e) {
+            throw new IOException("Malformed URL: " + fileUrl, e);
+        }
+        if (!isSafeUrl(parsedUrl)) {
+            throw new IOException("SSRF protection: rejecting URL with disallowed scheme or private/reserved address: " + fileUrl);
+        }
+
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
         boolean successful = false;
@@ -625,6 +645,18 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         return sha256.toString();
+    }
+
+    static boolean isSafeUrl(URL url) throws IOException {
+        String scheme = url.getProtocol();
+        if (!"http".equals(scheme) && !"https".equals(scheme)) {
+            return false;
+        }
+        InetAddress address = InetAddress.getByName(url.getHost());
+        return !address.isLoopbackAddress()
+                && !address.isLinkLocalAddress()
+                && !address.isSiteLocalAddress()
+                && !address.isAnyLocalAddress();
     }
 
 }
