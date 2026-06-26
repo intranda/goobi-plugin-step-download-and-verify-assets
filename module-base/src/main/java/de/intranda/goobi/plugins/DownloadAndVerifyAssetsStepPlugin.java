@@ -31,6 +31,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -472,6 +473,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         HttpRequestBase method = null;
         String actualHash = "";
         Path destination = null;
+        Path tempDestination = null;
         boolean skipped = false;
         try {
 
@@ -509,13 +511,14 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 skipped = true;
                 successful = true;
             } else {
-                StorageProvider.getInstance().createDirectories(destination.getParent());
+                tempDestination = destination.resolveSibling(destination.getFileName() + ".tmp");
+                StorageProvider.getInstance().createDirectories(tempDestination.getParent());
 
-                try (OutputStream out = StorageProvider.getInstance().newOutputStream(destination)) {
+                try (OutputStream out = StorageProvider.getInstance().newOutputStream(tempDestination)) {
                     entity.writeTo(out);
                 }
 
-                try (InputStream inputStream = StorageProvider.getInstance().newInputStream(destination)) {
+                try (InputStream inputStream = StorageProvider.getInstance().newInputStream(tempDestination)) {
                     actualHash = calculateHash(inputStream);
                 }
                 successful = true;
@@ -523,12 +526,17 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         } catch (Exception e) {
             log.error("Unable to connect to url " + fileUrl, e);
         }
-        if (!skipped && StringUtils.isNotBlank(hash) && !hash.equals(actualHash)) {
-            String message = "checksums do not match, the file might be corrupted: " + destination;
-            // delete the downloaded file
-            Files.delete(destination);
-            successful = false;
-            throw new IOException(message);
+
+        if (!skipped && tempDestination != null) {
+            if (StringUtils.isNotBlank(hash) && !hash.equals(actualHash)) {
+                String message = "checksums do not match, the file might be corrupted: " + tempDestination;
+                if (StorageProvider.getInstance().isFileExists(tempDestination)) {
+                    Files.delete(tempDestination);
+                }
+                successful = false;
+                throw new IOException(message);
+            }
+            Files.move(tempDestination, destination, StandardCopyOption.REPLACE_EXISTING);
         }
 
         //if file exist and is valid: send success message
