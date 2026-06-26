@@ -2,6 +2,7 @@ package de.intranda.goobi.plugins;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
@@ -90,6 +91,42 @@ public class DownloadAndVerifyAssetsPluginTest {
         DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
         plugin.initialize(step, "something");
         assertEquals(step.getTitel(), plugin.getStep().getTitel());
+    }
+
+    @Test
+    public void testGetMetadataValuesSingleTopstruct() {
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
+        plugin.initialize(step, "something");
+        List<String> values = plugin.getMetadataValues("ThesisId", "topstruct");
+        assertEquals(1, values.size());
+        assertEquals("106", values.get(0));
+    }
+
+    @Test
+    public void testGetMetadataValuesMultiValueTopstruct() {
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
+        plugin.initialize(step, "something");
+        List<String> values = plugin.getMetadataValues("AuthorSubjectTopicEng", "topstruct");
+        assertEquals(3, values.size());
+        assertTrue(values.contains("test 1"));
+        assertTrue(values.contains("test2"));
+        assertTrue(values.contains("test keyword 3"));
+    }
+
+    @Test
+    public void testGetMetadataValuesFirstchildMissing() {
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
+        plugin.initialize(step, "something");
+        List<String> values = plugin.getMetadataValues("ThesisId", "firstchild");
+        assertTrue(values.isEmpty());
+    }
+
+    @Test
+    public void testGetMetadataValuesUnknownType() {
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
+        plugin.initialize(step, "something");
+        List<String> values = plugin.getMetadataValues("NonExistentMetadataType", "topstruct");
+        assertTrue(values.isEmpty());
     }
 
     @Test

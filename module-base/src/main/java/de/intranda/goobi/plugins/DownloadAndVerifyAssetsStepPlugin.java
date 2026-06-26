@@ -35,11 +35,13 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
@@ -79,6 +81,9 @@ import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
 import ugh.dl.DigitalDocument;
+import ugh.dl.DocStruct;
+import ugh.dl.Metadata;
+import ugh.dl.MetadataType;
 import ugh.dl.Prefs;
 import ugh.exceptions.PreferencesException;
 import ugh.exceptions.ReadException;
@@ -95,6 +100,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private Process process;
     private transient VariableReplacer replacer;
+    private transient DigitalDocument dd;
+    private transient Prefs prefs;
 
     private String returnPath;
     private List<String> errorsList = new ArrayList<>();
@@ -131,9 +138,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
         // initialize VariableReplacer
         try {
-            DigitalDocument dd = process.readMetadataFile().getDigitalDocument();
-            Prefs prefs = process.getRegelsatz().getPreferences();
-            replacer = new VariableReplacer(dd, prefs, process, step);
+            this.dd = process.readMetadataFile().getDigitalDocument();
+            this.prefs = process.getRegelsatz().getPreferences();
+            replacer = new VariableReplacer(this.dd, this.prefs, process, step);
         } catch (ReadException | IOException | SwapException | PreferencesException e) {
             logError("Exception happened during initialization: " + e.getMessage());
         }
@@ -274,20 +281,28 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         for (FileNameProperty fileNameProperty : fileNameProperties) {
             String propertyName = fileNameProperty.getName();
             String hashPropertyName = fileNameProperty.getHash();
-            if (propertiesMap.containsKey(propertyName) && propertiesMap.containsKey(hashPropertyName)) {
+
+            List<String> urls;
+            List<String> hashValues;
+
+            if ("metadata".equals(fileNameProperty.getSource())) {
+                String level = fileNameProperty.getMetadataLevel();
+                urls = getMetadataValues(propertyName, level);
+                hashValues = getMetadataValues(hashPropertyName, level)
+                        .stream().map(String::trim).toList();
+            } else {
+                if (!propertiesMap.containsKey(propertyName) || !propertiesMap.containsKey(hashPropertyName)) {
+                    continue;
+                }
                 log.debug("found property = " + propertyName);
                 log.debug("the name of the according hash property is: " + hashPropertyName);
-                List<String> hashValues = propertiesMap.get(hashPropertyName)
-                        .stream()
-                        .map(String::trim)
-                        .toList();
+                urls = propertiesMap.get(propertyName);
+                hashValues = propertiesMap.get(hashPropertyName).stream().map(String::trim).toList();
+            }
 
-                List<String> urls = propertiesMap.get(propertyName);
-                log.debug("urls has " + urls.size() + " elements");
-                if (!urls.isEmpty()) {
-                    String folder = fileNameProperty.getFolder();
-                    addUrlsToBothMaps(urls, hashValues, folder);
-                }
+            log.debug("urls has " + urls.size() + " elements");
+            if (!urls.isEmpty()) {
+                addUrlsToBothMaps(urls, hashValues, fileNameProperty.getFolder());
             }
         }
     }
@@ -343,6 +358,40 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         return propertiesMap;
+    }
+
+    List<String> getMetadataValues(String metadataName, String metadataLevel) {
+        if (dd == null) {
+            return Collections.emptyList();
+        }
+
+        DocStruct ds;
+        if ("firstchild".equals(metadataLevel)) {
+            DocStruct topstruct = dd.getLogicalDocStruct();
+            if (topstruct.getAllChildren() == null || topstruct.getAllChildren().isEmpty()) {
+                log.warn("No firstchild available for metadata reading of: " + metadataName);
+                return Collections.emptyList();
+            }
+            ds = topstruct.getAllChildren().get(0);
+        } else {
+            ds = dd.getLogicalDocStruct();
+        }
+
+        MetadataType mdt = prefs.getMetadataTypeByName(metadataName);
+        if (mdt == null) {
+            logError("Unknown metadata type: " + metadataName);
+            return Collections.emptyList();
+        }
+
+        List<? extends Metadata> metadataList = ds.getAllMetadataByType(mdt);
+        if (metadataList == null) {
+            return Collections.emptyList();
+        }
+
+        return metadataList.stream()
+                .map(Metadata::getValue)
+                .filter(StringUtils::isNotBlank)
+                .collect(Collectors.toList());
     }
 
     /**
