@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -261,15 +262,21 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     public PluginReturnValue run() {
         // your logic goes here
         prepareUrlHashAndFolderMaps();
+        Map<String, String> errorMap = new HashMap<>();
 
+        boolean successful = true; //initially successful. So plugin returns true if no urls are set
         for (int i = 0; i < maxTryTimes; ++i) {
-            urlHashMap = processAllFiles();
+            errorMap = processAllFiles();
+            successful = errorMap.isEmpty();
+            if (successful) {
+                break; //all succeeded. break retry-loop
+            } else {
+                this.urlIdMap = errorMap.keySet().stream().collect(Collectors.toMap(Function.identity(), key -> this.urlIdMap.get(key)));
+            }
         }
 
-        boolean successful = urlHashMap.isEmpty();
-
         if (!successful) {
-            for (String fileUrl : urlHashMap.keySet()) {
+            for (String fileUrl : errorMap.keySet()) {
                 String message = "Failed " + maxTryTimes + " times to download and validate the file from: " + fileUrl;
                 logError(message);
             }
@@ -524,7 +531,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 successful = true;
             }
         } catch (Exception e) {
-            log.error("Unable to connect to url " + fileUrl, e);
+            throw new IOException("Unable to connect to url " + fileUrl, e);
         }
 
         if (!skipped && tempDestination != null) {
