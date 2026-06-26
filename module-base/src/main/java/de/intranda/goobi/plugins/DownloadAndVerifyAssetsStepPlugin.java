@@ -50,9 +50,11 @@ import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -125,6 +127,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private String authenticationToken;
 
     private String downloadUrl;
+    private String downloadMethod;
 
     private static Pattern filenamePattern = Pattern.compile(".*filename=\\\"(.*)\\\".*");
 
@@ -154,6 +157,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // replace variables in download url
         downloadUrl = replacer.replace(downloadUrl);
         authenticationToken = config.getString("authentication");
+        downloadMethod = config.getString("downloadMethod", "get");
         // <fileNameProperty>
         List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
         for (HierarchicalConfiguration fileNameConfig : fileNamePropertyConfigs) {
@@ -289,15 +293,21 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 String level = fileNameProperty.getMetadataLevel();
                 urls = getMetadataValues(propertyName, level);
                 hashValues = getMetadataValues(hashPropertyName, level)
-                        .stream().map(String::trim).toList();
+                        .stream()
+                        .map(String::trim)
+                        .toList();
             } else {
-                if (!propertiesMap.containsKey(propertyName) || !propertiesMap.containsKey(hashPropertyName)) {
+                if (!propertiesMap.containsKey(propertyName)) {
                     continue;
                 }
                 log.debug("found property = " + propertyName);
                 log.debug("the name of the according hash property is: " + hashPropertyName);
                 urls = propertiesMap.get(propertyName);
-                hashValues = propertiesMap.get(hashPropertyName).stream().map(String::trim).toList();
+                if (propertiesMap.containsKey(hashPropertyName)) {
+                    hashValues = propertiesMap.get(hashPropertyName).stream().map(String::trim).toList();
+                } else {
+                    hashValues = Collections.emptyList();
+                }
             }
 
             log.debug("urls has " + urls.size() + " elements");
@@ -322,7 +332,10 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             return false;
         }
 
-        if (urls.size() != hashes.size()) {
+        if (hashes == null || hashes.isEmpty()) {
+            hashes = Collections.emptyList(); //make sure its not null
+            log.info("No hash values set for urls. Continue without validation");
+        } else if (urls.size() != hashes.size()) {
             log.debug("urls and hashes are of different sizes");
             return false;
         }
@@ -330,7 +343,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         for (int i = 0; i < urls.size(); ++i) {
             String fileId = urls.get(i);
             String url = downloadUrl.replace("{FILEID}", fileId);
-            String hash = hashes.get(i);
+            String hash = hashes.size() <= i ? "" : hashes.get(i);
             urlHashMap.put(url, hash);
             urlFolderMap.put(url, folder);
             urlIdMap.put(url, fileId);
@@ -362,6 +375,9 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     List<String> getMetadataValues(String metadataName, String metadataLevel) {
         if (dd == null) {
+            return Collections.emptyList();
+        }
+        if (StringUtils.isBlank(metadataName)) {
             return Collections.emptyList();
         }
 
@@ -404,11 +420,11 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private Map<String, String> processAllFiles() {
         Map<String, String> unsuccessfulMap = new HashMap<>();
         // download and verify files
-        for (Map.Entry<String, String> urlHashPair : urlHashMap.entrySet()) {
-            String url = urlHashPair.getKey();
-            String hash = urlHashPair.getValue();
+        for (Map.Entry<String, String> urlIdPair : urlIdMap.entrySet()) {
+            String url = urlIdPair.getKey();
+            String fileId = urlIdPair.getValue();
             String targetFolder = urlFolderMap.get(url);
-            String fileId = urlIdMap.get(url);
+            String hash = urlHashMap.get(url);
             try {
                 processFile(url, hash, targetFolder, fileId);
 
@@ -448,15 +464,15 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
         boolean successful = false;
-        String fileName = Paths.get(fileUrl).getFileName().toString();
+        String fileName = Paths.get(parsedUrl.getPath()).getFileName().toString();
 
         CloseableHttpClient httpclient = null;
-        HttpPost method = null;
+        HttpRequestBase method = null;
         String actualHash = "";
         Path destination = null;
         try {
 
-            method = new HttpPost(fileUrl);
+            method = "post".equalsIgnoreCase(downloadMethod) ? new HttpPost(fileUrl) : new HttpGet(fileUrl);
             httpclient = HttpClientBuilder.create().build();
             if (StringUtils.isNotBlank(authenticationToken)) {
                 method.setHeader("Authorization", authenticationToken);
@@ -499,8 +515,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         } catch (Exception e) {
             log.error("Unable to connect to url " + fileUrl, e);
         }
-        // check checksum
-        if (!hash.equals(actualHash)) {
+        if (StringUtils.isNotBlank(hash) && !hash.equals(actualHash)) {
             String message = "checksums do not match, the file might be corrupted: " + destination;
             // delete the downloaded file
             Files.delete(destination);
