@@ -17,12 +17,24 @@
         <authentication>Bearer 123456</authentication>
         
         <downloadUrl>https://example.com/thesis/{meta.ThesisId}/file/{FILEID}</downloadUrl>
-        <!-- This tag accepts the following three attributes:
-              - @urlProperty: name of the property that holds the URL of the file
-              - @hashProperty: name of the property that holds the checksum of the file
-              - @folder: configured name of the target folder that shall be used to download the file. OPTIONAL. DEFAULT master.
+        <!-- This tag accepts the following attributes:
+              - @fileId: name of the property or metadata type that holds the file ID (used to build the download URL via {FILEID}).
+                         @urlProperty is accepted as a legacy alias when @fileId is absent.
+              - @hashProperty: name of the property or metadata type that holds the SHA-256 checksum of the file.
+              - @folder: configured name of the target folder for the downloaded file. OPTIONAL. DEFAULT master.
+              - @source: where to read @fileId and @hashProperty values from. Options: property (default) | metadata.
+              - @metadataLevel: which DocStruct level to read from when source=metadata. Options: topstruct (default) | firstchild.
          -->
-        <fileNameProperty urlProperty="AttachmentIDSplitted" hashProperty="AttachmentHashSplitted" folder="master" />
+        <!-- Read file IDs and hashes from process properties (default behaviour): -->
+        <fileNameProperty fileId="AttachmentIDSplitted" hashProperty="AttachmentHashSplitted" folder="master" />
+
+        <!-- Read file IDs and hashes from process metadata (topstruct): -->
+        <fileNameProperty fileId="AttachmentID" hashProperty="AttachmentHash" folder="master"
+                          source="metadata" metadataLevel="topstruct" />
+
+        <!-- Read file IDs and hashes from process metadata (firstchild, e.g. for volumes): -->
+        <fileNameProperty fileId="AttachmentID" hashProperty="AttachmentHash" folder="master"
+                          source="metadata" metadataLevel="firstchild" />
       
         
         <!-- A response tag accepts four attributes:
