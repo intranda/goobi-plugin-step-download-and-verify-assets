@@ -64,4 +64,14 @@
         <response type="success" method="put" url="URL_TO_BACH/upload_successful/{meta.ThesisId}" />
     </config>
 
+    <config>
+        <project>*</project>
+        <step>test step metadata</step>
+        <maxTryTimes>1</maxTryTimes>
+        <authentication>Bearer 123456</authentication>
+        <downloadUrl>https://example.com/thesis/{meta.ThesisId}/file/{FILEID}</downloadUrl>
+        <fileNameProperty fileId="ThesisId" hashProperty="TitleDocMain" folder="master"
+                          source="metadata" metadataLevel="topstruct" />
+    </config>
+
 </config_plugin>

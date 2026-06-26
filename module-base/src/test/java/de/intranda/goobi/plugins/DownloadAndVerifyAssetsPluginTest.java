@@ -92,6 +92,21 @@ public class DownloadAndVerifyAssetsPluginTest {
         assertEquals(step.getTitel(), plugin.getStep().getTitel());
     }
 
+    @Test
+    public void testInitWithFileIdAttribute() {
+        step.setTitel("test step metadata");
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
+        plugin.initialize(step, "something");
+        assertNotNull(plugin.getStep());
+    }
+
+    @Test
+    public void testInitWithUrlPropertyFallback() {
+        DownloadAndVerifyAssetsStepPlugin plugin = new DownloadAndVerifyAssetsStepPlugin();
+        plugin.initialize(step, "something");
+        assertNotNull(plugin.getStep());
+    }
+
     // does not work without access to BACH server, enable it locally
     @Ignore
     @Test

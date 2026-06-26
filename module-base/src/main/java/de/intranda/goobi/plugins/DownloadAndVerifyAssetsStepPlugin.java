@@ -150,14 +150,19 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // <fileNameProperty>
         List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
         for (HierarchicalConfiguration fileNameConfig : fileNamePropertyConfigs) {
-            String name = fileNameConfig.getString("@urlProperty", "");
+            String name = fileNameConfig.getString("@fileId", "");
+            if (StringUtils.isBlank(name)) {
+                name = fileNameConfig.getString("@urlProperty", "");
+            }
             String hash = fileNameConfig.getString("@hashProperty", "");
             String folder = fileNameConfig.getString("@folder", "master");
+            String source = fileNameConfig.getString("@source", "property");
+            String metadataLevel = fileNameConfig.getString("@metadataLevel", "topstruct");
 
             try {
                 String folderPath = process.getConfiguredImageFolder(folder);
                 log.debug("folderPath with name '" + folder + "' is: " + folderPath);
-                fileNameProperties.add(new FileNameProperty(name, hash, folderPath));
+                fileNameProperties.add(new FileNameProperty(name, hash, folderPath, source, metadataLevel));
 
             } catch (IOException | SwapException | DAOException e) {
                 String message = "Failed to get the configured image folder: " + folder;
@@ -613,6 +618,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         private String name;
         private String hash;
         private String folder;
+        private String source;
+        private String metadataLevel;
     }
 
     private static String calculateHash(InputStream is) throws IOException {
