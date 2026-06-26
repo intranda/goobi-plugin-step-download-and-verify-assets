@@ -128,6 +128,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
 
     private String downloadUrl;
     private String downloadMethod;
+    private boolean overwriteFiles;
 
     private static Pattern filenamePattern = Pattern.compile(".*filename=\\\"(.*)\\\".*");
 
@@ -158,6 +159,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         downloadUrl = replacer.replace(downloadUrl);
         authenticationToken = config.getString("authentication");
         downloadMethod = config.getString("downloadMethod", "get");
+        overwriteFiles = config.getBoolean("overwriteFiles", false);
         // <fileNameProperty>
         List<HierarchicalConfiguration> fileNamePropertyConfigs = config.configurationsAt("fileNameProperty");
         for (HierarchicalConfiguration fileNameConfig : fileNamePropertyConfigs) {
@@ -470,6 +472,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         HttpRequestBase method = null;
         String actualHash = "";
         Path destination = null;
+        boolean skipped = false;
         try {
 
             method = "post".equalsIgnoreCase(downloadMethod) ? new HttpPost(fileUrl) : new HttpGet(fileUrl);
@@ -499,23 +502,28 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 }
             }
 
-            destination = Paths.get(targetFolder, fileName + extension);
-            StorageProvider.getInstance().createDirectories(destination.getParent());
+            destination = fileName.contains(".") ? Paths.get(targetFolder, fileName) : Paths.get(targetFolder, fileName + extension);
 
-            try (OutputStream out = StorageProvider.getInstance().newOutputStream(destination)) {
-                entity.writeTo(out);
+            if (!overwriteFiles && StorageProvider.getInstance().isFileExists(destination)) {
+                log.debug("File already exists, skipping download: " + destination);
+                skipped = true;
+                successful = true;
+            } else {
+                StorageProvider.getInstance().createDirectories(destination.getParent());
+
+                try (OutputStream out = StorageProvider.getInstance().newOutputStream(destination)) {
+                    entity.writeTo(out);
+                }
+
+                try (InputStream inputStream = StorageProvider.getInstance().newInputStream(destination)) {
+                    actualHash = calculateHash(inputStream);
+                }
+                successful = true;
             }
-
-            // url is correctly formed, download the file
-
-            try (InputStream inputStream = StorageProvider.getInstance().newInputStream(destination)) {
-                actualHash = calculateHash(inputStream);
-            }
-            successful = true;
         } catch (Exception e) {
             log.error("Unable to connect to url " + fileUrl, e);
         }
-        if (StringUtils.isNotBlank(hash) && !hash.equals(actualHash)) {
+        if (!skipped && StringUtils.isNotBlank(hash) && !hash.equals(actualHash)) {
             String message = "checksums do not match, the file might be corrupted: " + destination;
             // delete the downloaded file
             Files.delete(destination);

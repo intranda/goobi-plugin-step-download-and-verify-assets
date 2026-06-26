@@ -17,6 +17,8 @@
         <authentication>Bearer 123456</authentication>
         <!-- HTTP method used to download files. Options: get (default) | post -->
         <downloadMethod>get</downloadMethod>
+        <!-- If false (default), already existing files are skipped. Set to true to overwrite existing files. -->
+        <overwriteFiles>false</overwriteFiles>
         <downloadUrl>https://example.com/thesis/{meta.ThesisId}/file/{FILEID}</downloadUrl>
         <!-- This tag accepts the following attributes:
               - @fileId: name of the property or metadata type that holds the file ID (used to build the download URL via {FILEID}).
