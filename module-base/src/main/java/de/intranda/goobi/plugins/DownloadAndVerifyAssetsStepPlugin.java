@@ -603,13 +603,15 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
             String method = response.getMethod();
             if (StringUtils.isBlank(method)) {
                 // use journal
-                String message = response.getMessage();
+                String message = response.getMessage() != null ? response.getMessage() : "";
+                message = message.replace("{FILEID}", fileId);
                 LogType logType = success ? LogType.INFO : LogType.ERROR;
                 logMessage(logType, message);
 
             } else {
                 String url = response.getUrl();
-                String jsonBase = response.getJson();
+                String jsonBase = response.getJson() != null ? response.getJson() : "";
+                jsonBase = jsonBase.replace("{FILEID}", fileId);
                 String json = generateJsonMessage(jsonBase);
                 log.debug("json = " + json);
                 reportSuccess = sendResponseViaRest(method, url.replace("{FILEID}", fileId), json) && reportSuccess;
