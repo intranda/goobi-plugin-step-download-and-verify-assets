@@ -22,13 +22,17 @@ package de.intranda.goobi.plugins;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -132,7 +136,8 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
     private String downloadMethod;
     private boolean overwriteFiles;
 
-    private static Pattern filenamePattern = Pattern.compile(".*filename=\\\"(.*)\\\".*");
+    private static final Pattern FILENAME_PATTERN = Pattern.compile("(?i)filename\\s*=\\s*\"?([^\";]+)\"?");
+    private static final Pattern FILENAME_STAR_PATTERN = Pattern.compile("(?i)filename\\*\\s*=\\s*[^']*''([^;]+)");
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -474,7 +479,7 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         // prepare URL
         log.debug("downloading file from url: " + fileUrl);
         boolean successful = false;
-        String fileName = Paths.get(parsedUrl.getPath()).getFileName().toString();
+        String urlFileName = Paths.get(parsedUrl.getPath()).getFileName().toString();
 
         CloseableHttpClient httpclient = null;
         HttpRequestBase method = null;
@@ -490,28 +495,23 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
                 method.setHeader("Authorization", authenticationToken);
             }
 
-            String extension = "";
             HttpResponse response = httpclient.execute(method);
             HttpEntity entity = response.getEntity();
-            for (Header h : response.getHeaders("content-disposition")) {
-                String val = h.getValue();
-                Matcher m = filenamePattern.matcher(val);
-                if (m.find()) {
-                    extension = m.group(1);
-                    if (extension.contains(".")) {
-                        extension = extension.substring(extension.indexOf("."));
+
+            String fileName = extractFilenameFromContentDisposition(response.getHeaders("content-disposition"));
+            if (StringUtils.isBlank(fileName)) {
+                String contentType = entity.getContentType() != null ? entity.getContentType().getValue() : "";
+                String extension = "";
+                if (StringUtils.isNotBlank(contentType)) {
+                    extension = "." + contentType.substring(contentType.indexOf("/") + 1);
+                    if (extension.contains(";")) {
+                        extension = extension.substring(0, extension.indexOf(";"));
                     }
                 }
-            }
-            String contentType = entity.getContentType().getValue();
-            if (StringUtils.isBlank(extension) && StringUtils.isNotBlank(contentType)) {
-                extension = "." + contentType.substring(contentType.indexOf("/") + 1);
-                if (extension.contains(";")) {
-                    extension = extension.substring(0, extension.indexOf(";"));
-                }
+                fileName = urlFileName.contains(".") ? urlFileName : urlFileName + extension;
             }
 
-            destination = fileName.contains(".") ? Paths.get(targetFolder, fileName) : Paths.get(targetFolder, fileName + extension);
+            destination = Paths.get(targetFolder, fileName);
 
             if (!overwriteFiles && StorageProvider.getInstance().isFileExists(destination)) {
                 log.debug("File already exists, skipping download: " + destination);
@@ -741,6 +741,59 @@ public class DownloadAndVerifyAssetsStepPlugin implements IStepPluginVersion2 {
         }
 
         return sha256.toString();
+    }
+
+    /**
+     * determine the file name announced via Content-Disposition headers, preferring the RFC 5987 encoded filename* parameter over the plain
+     * filename parameter
+     *
+     * @param contentDispositionHeaders the Content-Disposition headers of the HTTP response
+     * @return the sanitized file name, or null if no header provides a usable file name
+     */
+    static String extractFilenameFromContentDisposition(Header[] contentDispositionHeaders) {
+        String filenameStar = null;
+        String filename = null;
+        for (Header header : contentDispositionHeaders) {
+            String value = header.getValue();
+            if (filenameStar == null) {
+                Matcher starMatcher = FILENAME_STAR_PATTERN.matcher(value);
+                if (starMatcher.find()) {
+                    filenameStar = decodeRfc5987Value(starMatcher.group(1).trim());
+                }
+            }
+            if (filename == null) {
+                Matcher matcher = FILENAME_PATTERN.matcher(value);
+                if (matcher.find()) {
+                    filename = matcher.group(1).trim();
+                }
+            }
+        }
+
+        String rawFilename = StringUtils.isNotBlank(filenameStar) ? filenameStar : filename;
+        return StringUtils.isBlank(rawFilename) ? null : sanitizeFilename(rawFilename);
+    }
+
+    private static String decodeRfc5987Value(String encoded) {
+        try {
+            return URLDecoder.decode(encoded, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            return encoded;
+        }
+    }
+
+    /**
+     * strip any path components from a file name taken from an untrusted header, to prevent path traversal outside of the target folder
+     *
+     * @param rawFilename the file name as announced by the remote server
+     * @return the sanitized file name, or null if rawFilename is not a valid path
+     */
+    private static String sanitizeFilename(String rawFilename) {
+        try {
+            Path fileNamePath = Paths.get(rawFilename).getFileName();
+            return fileNamePath == null ? null : fileNamePath.toString();
+        } catch (InvalidPathException e) {
+            return null;
+        }
     }
 
     static boolean isSafeUrl(URL url) throws IOException {
